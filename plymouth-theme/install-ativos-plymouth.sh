@@ -175,9 +175,75 @@ elif [[ -f "$GRUB_DEFAULT" ]]; then
         echo "!! grub-mkconfig not found — regenerate your GRUB config manually."
     fi
 else
-    echo "!! Neither Limine nor GRUB config detected."
-    echo "   If you use systemd-boot, add 'quiet splash' to the 'options' line"
-    echo "   in your entries under /boot/loader/entries/*.conf manually."
+    SDBOOT_ENTRIES_DIR=""
+    for d in /boot/loader/entries /efi/loader/entries; do
+        [[ -d "$d" ]] && SDBOOT_ENTRIES_DIR="$d" && break
+    done
+
+    if [[ -n "$SDBOOT_ENTRIES_DIR" ]]; then
+        echo "==> systemd-boot detected — configuring kernel command line"
+        # THE BUG: this branch used to just print "add it yourself" and do
+        # nothing. archinstall's default bootloader is systemd-boot (not
+        # Limine/GRUB), so on installs that went through archinstall first
+        # and layered the AtivOS stack on top, this was the branch that
+        # actually mattered — and it silently did nothing.
+
+        # /etc/kernel/cmdline is what `kernel-install` (systemd's own
+        # entry generator, triggered automatically by the "linux" package's
+        # pacman hook on every kernel update) reads to build new loader
+        # entries — writing here keeps future kernel updates splash-enabled
+        # too, not just this one boot.
+        KERNEL_CMDLINE_FILE="/etc/kernel/cmdline"
+        if [[ -f "$KERNEL_CMDLINE_FILE" ]]; then
+            cp "$KERNEL_CMDLINE_FILE" "${KERNEL_CMDLINE_FILE}.bak.$(date +%s)"
+            if grep -qE '\bquiet\b' "$KERNEL_CMDLINE_FILE" && grep -qE '\bsplash\b' "$KERNEL_CMDLINE_FILE"; then
+                echo "    'quiet splash' already present in $KERNEL_CMDLINE_FILE"
+            else
+                sed -i -E 's/[[:space:]]*$//; s/$/ quiet splash/' "$KERNEL_CMDLINE_FILE"
+                echo "    Added 'quiet splash' to $KERNEL_CMDLINE_FILE"
+            fi
+        else
+            echo "quiet splash" > "$KERNEL_CMDLINE_FILE"
+            echo "    Created $KERNEL_CMDLINE_FILE with 'quiet splash'"
+            echo "    (archinstall-generated systemd-boot setups usually bake root=/rw"
+            echo "     params into the initrd/UKI rather than this file — if your"
+            echo "     existing entries' 'options' line has params that AREN'T also"
+            echo "     baked in, add those to this file too before relying on it.)"
+        fi
+
+        # Regenerate entries immediately so this boot (not just the next
+        # kernel update) picks up the splash.
+        if command -v kernel-install >/dev/null 2>&1; then
+            echo "==> Regenerating loader entries via kernel-install"
+            for kver_dir in /usr/lib/modules/*; do
+                [[ -f "$kver_dir/pkgbase" ]] || continue
+                kver="$(basename "$kver_dir")"
+                kernel-install add "$kver" "$kver_dir/vmlinuz" 2>/dev/null || true
+            done
+        fi
+
+        # Belt-and-suspenders: also sweep already-generated entry files
+        # directly, in case kernel-install isn't available or didn't touch
+        # every entry (e.g. a fallback-initramfs entry).
+        UPDATED=0
+        for conf in "$SDBOOT_ENTRIES_DIR"/*.conf; do
+            [[ -f "$conf" ]] || continue
+            if grep -qE '^options\b.*\bquiet\b' "$conf" && grep -qE '^options\b.*\bsplash\b' "$conf"; then
+                continue
+            fi
+            cp "$conf" "${conf}.bak.$(date +%s)"
+            if grep -qE '^options\b' "$conf"; then
+                sed -i -E 's/^(options[[:space:]].*)$/\1 quiet splash/' "$conf"
+            else
+                echo "options quiet splash" >> "$conf"
+            fi
+            UPDATED=1
+        done
+        [[ $UPDATED -eq 1 ]] && echo "    Swept 'quiet splash' directly into $SDBOOT_ENTRIES_DIR/*.conf"
+    else
+        echo "!! No Limine, GRUB, or systemd-boot configuration detected."
+        echo "   Add 'quiet splash' to your bootloader's kernel command line manually."
+    fi
 fi
 
 echo ""
