@@ -78,7 +78,7 @@ Item {
 
         PillButton {
             Layout.alignment: Qt.AlignHCenter
-            flat: true
+            flatStyle: true
             pillWidth: 240
             text: root.avatarPath == "" ? "Choose Picture…" : "Choose a Different Picture…"
             onClicked: fileDialog.open()

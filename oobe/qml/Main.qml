@@ -126,7 +126,7 @@ ApplicationWindow {
 
                     PillButton {
                         text: "Back"
-                        flat: true
+                        flatStyle: true
                         pillWidth: 88
                         visible: pageIndex > 0 && pageIndex < pages.length - 1
                         onClicked: goBack()

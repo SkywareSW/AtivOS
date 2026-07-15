@@ -6,8 +6,8 @@ Button {
     id: control
 
     property bool primary: false
-    property bool flat: false
-    property color baseColor: primary ? Theme.accent : (flat ? "transparent" : Theme.cardBg)
+    property bool flatStyle: false
+    property color baseColor: primary ? Theme.accent : (flatStyle ? "transparent" : Theme.cardBg)
     property color textColor: primary ? Theme.onAccent : Theme.textPrimary
     property real pillHeight: 40
     property real pillWidth: Math.max(implicitContentWidth + 40, 96)
@@ -25,8 +25,8 @@ Button {
         id: bg
         radius: Theme.radiusPill
         color: {
-            if (!control.enabled) return control.flat ? "transparent" : Theme.divider
-            if (control.flat) return control.hovered ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+            if (!control.enabled) return control.flatStyle ? "transparent" : Theme.divider
+            if (control.flatStyle) return control.hovered ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
             return control.hovered ? Qt.lighter(control.baseColor, primary ? 1.08 : 1.25) : control.baseColor
         }
 

@@ -94,7 +94,7 @@ Item {
 
                 PillButton {
                     text: "Network Settings"
-                    flat: true
+                    flatStyle: true
                     pillHeight: 34
                     pillWidth: 150
                     visible: root.checked && !root.connected
