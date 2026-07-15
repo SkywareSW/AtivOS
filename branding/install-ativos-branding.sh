@@ -95,6 +95,59 @@ EOF
 cp /etc/issue /etc/issue.net
 
 # =========================================================================
+# 1b. Limine boot menu entry name
+#
+#     THE BUG: on systems using limine-entry-tool / limine-mkinitcpio-hook
+#     (the standard Limine kernel-entry manager on Arch and Arch-based
+#     distros like CachyOS), the boot menu title comes from TARGET_OS_NAME
+#     in /etc/default/limine — NOT from /etc/os-release. If that variable
+#     is unset (the default), the tool falls back to the hardcoded name
+#     "Arch Linux", which is why entries kept showing "Arch Linux (linux)"
+#     no matter what os-release said. Renaming is safe at any time — entries
+#     are tracked by machine-id, not by name.
+# =========================================================================
+echo "==> Configuring Limine boot menu entry name"
+
+LIMINE_DEFAULT="/etc/default/limine"
+if command -v limine-entry-tool >/dev/null 2>&1 || [[ -f "$LIMINE_DEFAULT" ]] || [[ -f /etc/limine-entry-tool.conf ]]; then
+    if [[ ! -f "$LIMINE_DEFAULT" ]]; then
+        if [[ -f /etc/limine-entry-tool.conf ]]; then
+            cp /etc/limine-entry-tool.conf "$LIMINE_DEFAULT"
+        else
+            touch "$LIMINE_DEFAULT"
+        fi
+    fi
+    cp "$LIMINE_DEFAULT" "${LIMINE_DEFAULT}.bak.$(date +%s)" 2>/dev/null || true
+
+    if grep -qE '^\s*#?\s*TARGET_OS_NAME=' "$LIMINE_DEFAULT"; then
+        sed -i -E 's/^\s*#?\s*TARGET_OS_NAME=.*/TARGET_OS_NAME="AtivOS"/' "$LIMINE_DEFAULT"
+    else
+        echo 'TARGET_OS_NAME="AtivOS"' >> "$LIMINE_DEFAULT"
+    fi
+    echo "    Set TARGET_OS_NAME=\"AtivOS\" in $LIMINE_DEFAULT"
+
+    # Also sweep any already-generated limine.conf so the rename is visible
+    # immediately, without waiting on the next kernel install/update to
+    # trigger regeneration.
+    for conf in /boot/limine.conf /boot/EFI/limine/limine.conf /boot/limine/limine.conf; do
+        [[ -f "$conf" ]] && sed -i 's/Arch Linux/AtivOS/g' "$conf" 2>/dev/null || true
+    done
+
+    if command -v limine-mkinitcpio >/dev/null 2>&1; then
+        echo "    Regenerating Limine entries via limine-mkinitcpio"
+        limine-mkinitcpio -P || true
+    elif command -v limine-update >/dev/null 2>&1; then
+        echo "    Regenerating Limine entries via limine-update"
+        limine-update || true
+    else
+        echo "    No limine-mkinitcpio/limine-update found — entries already patched in place;"
+        echo "    they'll read \"AtivOS\" from here on once regenerated."
+    fi
+else
+    echo "    No Limine entry tool detected — skipping (GRUB/systemd-boot users: nothing to do here)."
+fi
+
+# =========================================================================
 # 2. Logo pixmap for tools that read the LOGO= key (GNOME Software, some
 #    fetch tools, KInfoCenter icon) — installed as /usr/share/pixmaps
 # =========================================================================
@@ -196,6 +249,17 @@ if command -v plasmashell >/dev/null 2>&1 || [[ -d "$REAL_HOME/.config/plasma-or
         mkdir -p "$ICON_THEME_DIR"/{16x16,22x22,32x32,48x48,64x64,128x128,256x256}/{apps,actions}
         mkdir -p "$ICON_THEME_DIR/scalable/apps"
 
+        # THE BUG: two things were wrong before.
+        #  1. "Type=Fixed" buckets only match a size EXACTLY (16, 22, 32...).
+        #     Any lookup for an in-between size (e.g. 20px, 24px — common at
+        #     fractional display scaling) had no match in our theme and fell
+        #     straight through to the inherited Breeze icon instead.
+        #  2. Kickoff/Kicker most commonly looks up "start-here-kde-symbolic",
+        #     not "start-here-kde" — we only ever shipped the non-symbolic
+        #     name, so the symbolic lookup always resolved to Breeze.
+        # Fix: use "Type=Scalable" with a generous MinSize/MaxSize range so
+        # every requested size lands inside our bucket, and ship both icon
+        # names.
         cat > "$ICON_THEME_DIR/index.theme" <<EOF
 [Icon Theme]
 Name=AtivOS
@@ -205,49 +269,67 @@ Directories=16x16/apps,22x22/apps,32x32/apps,48x48/apps,64x64/apps,128x128/apps,
 
 [16x16/apps]
 Size=16
+MinSize=8
+MaxSize=20
 Context=Applications
-Type=Fixed
+Type=Scalable
 
 [22x22/apps]
 Size=22
+MinSize=20
+MaxSize=28
 Context=Applications
-Type=Fixed
+Type=Scalable
 
 [32x32/apps]
 Size=32
+MinSize=28
+MaxSize=40
 Context=Applications
-Type=Fixed
+Type=Scalable
 
 [48x48/apps]
 Size=48
+MinSize=40
+MaxSize=56
 Context=Applications
-Type=Fixed
+Type=Scalable
 
 [64x64/apps]
 Size=64
+MinSize=56
+MaxSize=96
 Context=Applications
-Type=Fixed
+Type=Scalable
 
 [128x128/apps]
 Size=128
+MinSize=96
+MaxSize=192
 Context=Applications
-Type=Fixed
+Type=Scalable
 
 [256x256/apps]
 Size=256
+MinSize=192
+MaxSize=512
 Context=Applications
-Type=Fixed
+Type=Scalable
 EOF
 
         # Same source image scaled into each bucket via ImageMagick if available,
-        # otherwise just copied as-is (KDE will scale on render).
+        # otherwise just copied as-is (KDE will scale on render). Ship both the
+        # regular and "-symbolic" icon names since different Kickoff/Kicker
+        # configurations look up either one.
         for size in 16 22 32 48 64 128 256; do
-            dest="$ICON_THEME_DIR/${size}x${size}/apps/start-here-kde.png"
-            if command -v convert >/dev/null 2>&1; then
-                convert "$START_ICON" -resize "${size}x${size}" "$dest"
-            else
-                cp "$START_ICON" "$dest"
-            fi
+            for name in start-here-kde start-here-kde-symbolic; do
+                dest="$ICON_THEME_DIR/${size}x${size}/apps/${name}.png"
+                if command -v convert >/dev/null 2>&1; then
+                    convert "$START_ICON" -resize "${size}x${size}" "$dest"
+                else
+                    cp "$START_ICON" "$dest"
+                fi
+            done
         done
 
         gtk-update-icon-cache -f "$ICON_THEME_DIR" >/dev/null 2>&1 || true
@@ -257,11 +339,77 @@ EOF
             || sudo -u "$REAL_USER" kwriteconfig5 --file kdeglobals --group Icons --key Theme "AtivOS" 2>/dev/null \
             || true
 
+        # THE OTHER COMMON CAUSE: the Kickoff/Kicker widget can have its icon
+        # pinned directly in the applet's own config (set via right-click ->
+        # Configure -> click the icon), which always wins over the icon
+        # theme no matter what we do above. Patch that directly so it "just
+        # works" without a manual step.
+        APPLETSRC="$REAL_HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
+        if [[ -f "$APPLETSRC" ]]; then
+            echo "    Checking for a pinned start-button icon override in Plasma config"
+            sudo -u "$REAL_USER" python3 - "$APPLETSRC" "$START_ICON" <<'PYEOF'
+import re, sys
+
+path, icon_path = sys.argv[1], sys.argv[2]
+with open(path, "r") as f:
+    text = f.read()
+
+# Split into (header, body) blocks. KDE ini files store nested group paths
+# as one literal bracketed header string, e.g. "[Containments][2][Applets][3]".
+blocks = re.split(r'^(\[.*\])$', text, flags=re.M)
+# blocks[0] is any pre-content; then alternating header/body pairs
+kickoff_prefixes = []
+for i in range(1, len(blocks), 2):
+    header, body = blocks[i], blocks[i + 1] if i + 1 < len(blocks) else ""
+    m = re.match(r'^\[(Containments\]\[\d+\]\[Applets\]\[\d+)\]$', header)
+    if m and re.search(r'^plugin=org\.kde\.plasma\.(kickoff|kicker)\s*$', body, flags=re.M):
+        kickoff_prefixes.append(m.group(1))
+
+if not kickoff_prefixes:
+    print("    No Kickoff/Kicker applet found in config (nothing to patch).")
+    sys.exit(0)
+
+changed = False
+for prefix in kickoff_prefixes:
+    cfg_header = f"[{prefix}][Configuration][General]"
+    idx = text.find(cfg_header)
+    if idx == -1:
+        # No Configuration][General block yet for this applet -- create one
+        # after the *entire* applet section (header + body), not right after
+        # the header line, or we'd split the header from its own "plugin="
+        # body line.
+        applet_header = f"[{prefix}]\n"
+        pos = text.find(applet_header)
+        if pos == -1:
+            continue
+        body_start = pos + len(applet_header)
+        next_header = text.find("\n[", body_start)
+        insert_at = next_header if next_header != -1 else len(text)
+        insertion = f"\n{cfg_header}\nicon={icon_path}\n"
+        text = text[:insert_at] + insertion + text[insert_at:]
+        changed = True
+    else:
+        block_start = idx + len(cfg_header)
+        next_header = text.find("\n[", block_start)
+        block_end = next_header if next_header != -1 else len(text)
+        block = text[block_start:block_end]
+        if re.search(r'^icon=', block, flags=re.M):
+            block = re.sub(r'^icon=.*$', f"icon={icon_path}", block, flags=re.M)
+        else:
+            block = f"\nicon={icon_path}" + block
+        text = text[:block_start] + block + text[block_end:]
+        changed = True
+
+if changed:
+    with open(path, "w") as f:
+        f.write(text)
+    print(f"    Pinned start-button icon overridden to {icon_path} for {len(kickoff_prefixes)} applet(s).")
+PYEOF
+        fi
+
         echo "    Icon theme installed at $ICON_THEME_DIR and set as active theme."
-        echo "    NOTE: if your Kickoff/start-button applet has a manually pinned icon"
-        echo "    (right-click widget -> icon), it overrides the theme icon. In that case,"
-        echo "    right-click the start button -> Configure -> click the icon -> pick the"
-        echo "    file at: $START_ICON"
+        echo "    Log out and back in (or run 'kquitapp6 plasmashell; kstart6 plasmashell')"
+        echo "    for the new start-button icon to show up."
     else
         echo "    Skipping KDE icon theme: no start.png or logo.png found in $ASSETS_DIR"
     fi

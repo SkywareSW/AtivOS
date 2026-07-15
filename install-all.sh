@@ -9,6 +9,55 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ---- styling ---------------------------------------------------------
+if [[ -t 1 ]]; then
+    C_RESET='\033[0m'; C_BOLD='\033[1m'; C_DIM='\033[2m'
+    C_ACCENT='\033[38;5;111m'; C_OK='\033[38;5;114m'; C_ERR='\033[38;5;203m'
+else
+    C_RESET=''; C_BOLD=''; C_DIM=''; C_ACCENT=''; C_OK=''; C_ERR=''
+fi
+
+TOTAL_STEPS=6
+STEP_NUM=0
+FAILED_STEPS=()
+
+hr() { printf "${C_DIM}%s${C_RESET}\n" "$(printf '─%.0s' $(seq 1 60))"; }
+
+banner() {
+    printf "\n${C_ACCENT}${C_BOLD}"
+    cat <<'EOF'
+      _   _   _         ___  ____
+     / \ | |_(_)_   __ / _ \/ ___|
+    / _ \| __| \ \ / /| | | \___ \
+   / ___ \ |_| |\ V / | |_| |___) |
+  /_/   \_\__|_| \_/   \___/|____/
+EOF
+    printf "${C_RESET}${C_DIM}  installing your system, step by step${C_RESET}\n\n"
+}
+
+step_header() {
+    STEP_NUM=$((STEP_NUM + 1))
+    echo ""
+    hr
+    printf "${C_ACCENT}${C_BOLD} [%d/%d]${C_RESET} ${C_BOLD}%s${C_RESET}\n" "$STEP_NUM" "$TOTAL_STEPS" "$1"
+    hr
+}
+
+run_step() {
+    local name="$1" script="$2"
+    step_header "$name"
+    local start
+    start=$(date +%s)
+    if bash "$script"; then
+        local elapsed=$(( $(date +%s) - start ))
+        printf "${C_OK}  \xe2\x9c\x94 done${C_RESET} ${C_DIM}(%ss)${C_RESET}\n" "$elapsed"
+    else
+        local elapsed=$(( $(date +%s) - start ))
+        printf "${C_ERR}  \xe2\x9c\x98 failed${C_RESET} ${C_DIM}(%ss)${C_RESET} \xe2\x80\x94 continuing with the remaining steps.\n" "$elapsed"
+        FAILED_STEPS+=("$name")
+    fi
+}
+
 # Make sure the sub-scripts are executable regardless of how this repo was
 # transferred (unzip and some git configs can strip the +x bit).
 chmod +x "$SCRIPT_DIR"/desktop/install-ativos-kde.sh \
@@ -19,41 +68,27 @@ chmod +x "$SCRIPT_DIR"/desktop/install-ativos-kde.sh \
          "$SCRIPT_DIR"/gpu-drivers/install-ativos-gpu-drivers.sh \
          "$SCRIPT_DIR"/oobe/install-ativos-oobe.sh 2>/dev/null || true
 
-echo "############################################"
-echo "# 1/6 — KDE Plasma desktop"
-echo "############################################"
-bash "$SCRIPT_DIR/desktop/install-ativos-kde.sh"
+banner
+
+run_step "KDE Plasma desktop"                 "$SCRIPT_DIR/desktop/install-ativos-kde.sh"
+run_step "Branding"                           "$SCRIPT_DIR/branding/install-ativos-branding.sh"
+run_step "ativ package manager"               "$SCRIPT_DIR/package-manager/setup-ativ.sh"
+run_step "GPU drivers"                        "$SCRIPT_DIR/gpu-drivers/install-ativos-gpu-drivers.sh"
+run_step "Plymouth boot splash"                "$SCRIPT_DIR/plymouth-theme/install-ativos-plymouth.sh"
+run_step "First-boot setup assistant (OOBE)"  "$SCRIPT_DIR/oobe/install-ativos-oobe.sh"
 
 echo ""
-echo "############################################"
-echo "# 2/6 — Branding"
-echo "############################################"
-bash "$SCRIPT_DIR/branding/install-ativos-branding.sh"
-
+hr
+if [[ ${#FAILED_STEPS[@]} -eq 0 ]]; then
+    printf "${C_OK}${C_BOLD} \xe2\x9c\x94 All AtivOS components installed successfully.${C_RESET}\n"
+else
+    printf "${C_ERR}${C_BOLD} \xe2\x9c\x98 %d step(s) failed:${C_RESET}\n" "${#FAILED_STEPS[@]}"
+    for s in "${FAILED_STEPS[@]}"; do
+        printf "${C_ERR}   - %s${C_RESET}\n" "$s"
+    done
+    printf "${C_DIM}   Scroll up for details, fix the issue, and re-run the corresponding\n   script directly (each one is safe to re-run on its own).${C_RESET}\n"
+fi
+hr
 echo ""
-echo "############################################"
-echo "# 3/6 — ativ package manager"
-echo "############################################"
-bash "$SCRIPT_DIR/package-manager/setup-ativ.sh"
-
-echo ""
-echo "############################################"
-echo "# 4/6 — GPU drivers"
-echo "############################################"
-bash "$SCRIPT_DIR/gpu-drivers/install-ativos-gpu-drivers.sh"
-
-echo ""
-echo "############################################"
-echo "# 5/6 — Plymouth boot splash"
-echo "############################################"
-bash "$SCRIPT_DIR/plymouth-theme/install-ativos-plymouth.sh"
-
-echo ""
-echo "############################################"
-echo "# 6/6 — First-boot setup assistant (OOBE)"
-echo "############################################"
-bash "$SCRIPT_DIR/oobe/install-ativos-oobe.sh"
-
-echo ""
-echo "==> All AtivOS components installed. Reboot to land on the SDDM login"
-echo "    screen — the Setup Assistant will greet you on first login."
+echo "Reboot to land on the SDDM login screen — the Setup Assistant will"
+echo "greet you on first login."

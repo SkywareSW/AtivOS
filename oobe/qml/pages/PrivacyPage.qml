@@ -33,7 +33,7 @@ Item {
 
         Rectangle {
             Layout.fillWidth: true
-            radius: 12
+            radius: Theme.radiusCard
             color: Theme.cardBg
             implicitHeight: contentCol.implicitHeight + 32
 

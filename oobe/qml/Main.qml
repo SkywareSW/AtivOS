@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.ativos.oobe
+import "components"
 
 ApplicationWindow {
     id: window
@@ -9,7 +10,7 @@ ApplicationWindow {
     height: 560
     visible: true
     flags: Qt.Window | Qt.FramelessWindowHint
-    color: Theme.bg
+    color: "transparent"
     title: "AtivOS Setup Assistant"
 
     Component.onCompleted: {
@@ -47,92 +48,122 @@ ApplicationWindow {
         }
     }
 
-    ColumnLayout {
+    // ---- soft drop shadow behind the rounded panel --------------------
+    // Hand-rolled (no extra Qt module / build dependency needed): a few
+    // stacked, progressively larger, near-transparent rounded outlines
+    // under the real panel approximate a soft blur falloff.
+    Item {
         anchors.fill: parent
-        spacing: 0
-
-        StackView {
-            id: stack
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            initialItem: pages[0].source
-
-            replaceEnter: Transition {
-                PropertyAnimation { property: "opacity"; from: 0; to: 1; duration: 220 }
-                PropertyAnimation { property: "x"; from: 24; to: 0; duration: 220; easing.type: Easing.OutCubic }
-            }
-            replaceExit: Transition {
-                PropertyAnimation { property: "opacity"; from: 1; to: 0; duration: 160 }
+        anchors.margins: -20
+        z: -1
+        Repeater {
+            model: 8
+            Rectangle {
+                anchors.centerIn: parent
+                width: parent.width - (7 - index) * 5
+                height: parent.height - (7 - index) * 5
+                radius: Theme.radiusWindow + (parent.width - width) / 2
+                color: "transparent"
+                border.width: 3
+                border.color: Qt.rgba(0, 0, 0, 0.05 - index * 0.004)
             }
         }
+    }
 
-        // ---- bottom nav bar ------------------------------------------------
-        Rectangle {
-            Layout.fillWidth: true
-            height: 76
-            color: Theme.bgElevated
+    // ---- the rounded, clipped panel that holds everything -------------
+    Rectangle {
+        id: panel
+        anchors.fill: parent
+        radius: Theme.radiusWindow
+        color: Theme.bg
+        clip: true
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.07)
 
-            Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.divider }
+        // Frameless window has no OS titlebar to drag by, so the top strip
+        // (above any page content) doubles as one.
+        MouseArea {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 32
+            onPressed: window.startSystemMove()
+        }
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 28
-                anchors.rightMargin: 28
-                spacing: 16
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 0
 
-                Button {
-                    text: "Back"
-                    flat: true
-                    visible: pageIndex > 0 && pageIndex < pages.length - 1
-                    onClicked: goBack()
-                    contentItem: Text {
-                        text: parent.text
-                        color: Theme.textSecondary
-                        font.pixelSize: 14
-                        verticalAlignment: Text.AlignVCenter
-                        horizontalAlignment: Text.AlignHCenter
-                    }
-                    background: Rectangle { color: "transparent" }
+            StackView {
+                id: stack
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                initialItem: pages[0].source
+
+                replaceEnter: Transition {
+                    PropertyAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationMedium }
+                    PropertyAnimation { property: "x"; from: 32; to: 0; duration: Theme.durationSlow; easing.type: Easing.OutCubic }
                 }
+                replaceExit: Transition {
+                    PropertyAnimation { property: "opacity"; from: 1; to: 0; duration: Theme.durationFast }
+                    PropertyAnimation { property: "x"; from: 0; to: -24; duration: Theme.durationFast; easing.type: Easing.InCubic }
+                }
+            }
 
-                Item { Layout.fillWidth: true }
+            // ---- bottom nav bar --------------------------------------------
+            Rectangle {
+                Layout.fillWidth: true
+                height: 76
+                color: Theme.bgElevated
 
-                Row {
-                    spacing: 8
-                    Layout.alignment: Qt.AlignVCenter
-                    visible: pageIndex < pages.length - 1
-                    Repeater {
-                        model: pages.length
-                        Rectangle {
-                            width: 6; height: 6; radius: 3
-                            color: index === pageIndex ? Theme.accent : Theme.divider
+                Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.divider }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 28
+                    anchors.rightMargin: 28
+                    spacing: 16
+
+                    PillButton {
+                        text: "Back"
+                        flat: true
+                        pillWidth: 88
+                        visible: pageIndex > 0 && pageIndex < pages.length - 1
+                        onClicked: goBack()
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    // animated capsule step indicator: the active step
+                    // expands into a pill instead of just changing color
+                    Row {
+                        spacing: 8
+                        Layout.alignment: Qt.AlignVCenter
+                        visible: pageIndex < pages.length - 1
+                        Repeater {
+                            model: pages.length
+                            Rectangle {
+                                width: index === pageIndex ? 20 : 6
+                                height: 6
+                                radius: 3
+                                color: index === pageIndex ? Theme.accent : Theme.divider
+                                Behavior on width { NumberAnimation { duration: Theme.durationMedium; easing.type: Easing.OutBack } }
+                                Behavior on color { ColorAnimation { duration: Theme.durationMedium } }
+                            }
                         }
                     }
-                }
 
-                Item { Layout.fillWidth: true }
+                    Item { Layout.fillWidth: true }
 
-                Button {
-                    id: nextButton
-                    text: pageIndex === pages.length - 2 ? "Finish Setup"
-                        : pageIndex === pages.length - 1 ? "Get Started"
-                        : "Continue"
-                    enabled: canContinue
-                    onClicked: goNext()
-
-                    background: Rectangle {
-                        radius: 8
-                        color: nextButton.enabled ? Theme.accent : Theme.divider
-                        implicitWidth: 140
-                        implicitHeight: 38
-                    }
-                    contentItem: Text {
-                        text: nextButton.text
-                        color: nextButton.enabled ? "#0d1117" : Theme.textSecondary
-                        font.pixelSize: 14
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+                    PillButton {
+                        id: nextButton
+                        primary: true
+                        enabled: canContinue
+                        pillWidth: 140
+                        text: pageIndex === pages.length - 2 ? "Finish Setup"
+                            : pageIndex === pages.length - 1 ? "Get Started"
+                            : "Continue"
+                        onClicked: goNext()
                     }
                 }
             }

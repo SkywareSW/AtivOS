@@ -41,22 +41,44 @@ MKINITCPIO_CONF="/etc/mkinitcpio.conf"
 
 if grep -qE '^HOOKS=\([^)]*\bsystemd\b' "$MKINITCPIO_CONF"; then
     HOOK_NAME="sd-plymouth"
-    ANCHOR="systemd"
 else
     HOOK_NAME="plymouth"
-    ANCHOR="udev"
 fi
 
 if grep -qE "^HOOKS=.*\b${HOOK_NAME}\b" "$MKINITCPIO_CONF"; then
     echo "==> '$HOOK_NAME' hook already present in mkinitcpio.conf"
 else
-    echo "==> Adding '$HOOK_NAME' hook to $MKINITCPIO_CONF (after '$ANCHOR')"
+    # THE ACTUAL BUG (splash never appearing): this used to always insert the
+    # hook right after "udev"/"systemd" — the very start of the HOOKS array.
+    # That's too early: plymouth needs the KMS/DRM modules (loaded by the
+    # "kms" hook) already active so it can draw a real graphical splash, and
+    # it needs to run before "filesystems"/"fsck" so the splash is already up
+    # before those stages print their own messages. Inserted too early,
+    # plymouth silently starts in a non-graphical fallback mode — the hook
+    # "works" (no errors, boots fine) but nothing is ever visibly shown.
+    # Correct position: immediately before "filesystems" (falls back to
+    # "fsck", then to right after udev/systemd only if neither exists).
+    if grep -qE '\bfilesystems\b' "$MKINITCPIO_CONF"; then
+        ANCHOR="filesystems"; POSITION="before"
+    elif grep -qE '\bfsck\b' "$MKINITCPIO_CONF"; then
+        ANCHOR="fsck"; POSITION="before"
+    elif grep -qE '\bsystemd\b' "$MKINITCPIO_CONF"; then
+        ANCHOR="systemd"; POSITION="after"
+    else
+        ANCHOR="udev"; POSITION="after"
+    fi
+
+    echo "==> Adding '$HOOK_NAME' hook to $MKINITCPIO_CONF ($POSITION '$ANCHOR')"
     cp "$MKINITCPIO_CONF" "${MKINITCPIO_CONF}.bak.$(date +%s)"
-    sed -i -E "s/(HOOKS=\([^)]*\b${ANCHOR}\b)/\1 ${HOOK_NAME}/" "$MKINITCPIO_CONF"
+    if [[ "$POSITION" == "before" ]]; then
+        sed -i -E "s/(HOOKS=\([^)]*)\b${ANCHOR}\b/\1${HOOK_NAME} ${ANCHOR}/" "$MKINITCPIO_CONF"
+    else
+        sed -i -E "s/(HOOKS=\([^)]*\b${ANCHOR}\b)/\1 ${HOOK_NAME}/" "$MKINITCPIO_CONF"
+    fi
     if ! grep -qE "^HOOKS=.*\b${HOOK_NAME}\b" "$MKINITCPIO_CONF"; then
         echo "    Could not auto-edit HOOKS (unexpected format)."
         echo "    Add '$HOOK_NAME' manually to the HOOKS= array in $MKINITCPIO_CONF,"
-        echo "    right after '$ANCHOR', then re-run this script."
+        echo "    right before 'filesystems' (after 'kms'/'block'), then re-run this script."
         exit 1
     fi
 fi

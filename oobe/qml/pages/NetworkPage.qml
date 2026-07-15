@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.ativos.oobe
+import "../components"
 
 Item {
     id: root
@@ -40,7 +41,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 120
-            radius: 12
+            radius: Theme.radiusCard
             color: Theme.cardBg
 
             RowLayout {
@@ -49,8 +50,19 @@ Item {
                 spacing: 18
 
                 Rectangle {
+                    id: statusCircle
                     width: 48; height: 48; radius: 24
-                    color: root.checked && root.connected ? "#2e7d4f" : "#4a3230"
+                    color: !root.checked ? Theme.cardBg : (root.connected ? "#2e7d4f" : "#4a3230")
+
+                    Behavior on color { ColorAnimation { duration: Theme.durationMedium } }
+
+                    SequentialAnimation on opacity {
+                        running: !root.checked
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.55; duration: 500; easing.type: Easing.InOutQuad }
+                        NumberAnimation { to: 1.0; duration: 500; easing.type: Easing.InOutQuad }
+                    }
+
                     Text {
                         anchors.centerIn: parent
                         text: root.checked ? (root.connected ? "✓" : "!") : "…"
@@ -80,33 +92,22 @@ Item {
                     }
                 }
 
-                Button {
+                PillButton {
                     text: "Network Settings"
+                    flat: true
+                    pillHeight: 34
+                    pillWidth: 150
                     visible: root.checked && !root.connected
                     onClicked: Backend.openNetworkSettings()
-                    background: Rectangle { radius: 8; color: Theme.divider; implicitWidth: 150; implicitHeight: 34 }
-                    contentItem: Text {
-                        text: parent.text
-                        color: Theme.textPrimary
-                        font.pixelSize: 12
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
                 }
 
-                Button {
+                PillButton {
                     text: "Check Again"
+                    primary: true
+                    pillHeight: 34
+                    pillWidth: 110
                     visible: root.checked && !root.connected
                     onClicked: root.recheck()
-                    background: Rectangle { radius: 8; color: Theme.accent; implicitWidth: 110; implicitHeight: 34 }
-                    contentItem: Text {
-                        text: parent.text
-                        color: "#0d1117"
-                        font.pixelSize: 12
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
                 }
             }
         }

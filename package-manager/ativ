@@ -55,6 +55,44 @@ ok()    { echo -e "${C_OK}==>${C_RESET} $*"; }
 warn()  { echo -e "${C_WARN}!!${C_RESET} $*" >&2; }
 err()   { echo -e "${C_ERR}xx${C_RESET} $*" >&2; }
 
+# ---- spinner animation for silent steps (network calls, git clones) ------
+# pacman/makepkg/flatpak already print their own live progress, so those are
+# left alone; this is for the previously-silent steps in between where ativ
+# would otherwise just sit there with no feedback.
+SPIN_FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+
+run_with_spinner() {
+    local msg="$1"; shift
+    local logfile status i=0
+    logfile=$(mktemp)
+
+    if [[ "$COLOR" != true || ! -t 1 ]]; then
+        info "$msg"
+        "$@" >"$logfile" 2>&1
+        status=$?
+    else
+        ("$@" >"$logfile" 2>&1) &
+        local pid=$!
+        while kill -0 "$pid" 2>/dev/null; do
+            printf "\r${C_INFO}%s${C_RESET} %s" "${SPIN_FRAMES[i % ${#SPIN_FRAMES[@]}]}" "$msg"
+            i=$((i + 1))
+            sleep 0.08
+        done
+        wait "$pid"
+        status=$?
+        printf "\r\033[K"
+    fi
+
+    if [[ $status -eq 0 ]]; then
+        ok "$msg"
+    else
+        err "$msg (failed)"
+        cat "$logfile" >&2
+    fi
+    rm -f "$logfile"
+    return $status
+}
+
 log_action() {
     local msg="$1"
     local ts
@@ -120,12 +158,11 @@ aur_build_install() {
     mkdir -p "$BUILD_DIR"
     local pkg_dir="$BUILD_DIR/$pkg"
 
-    info "Fetching AUR package: $pkg"
     if [[ -d "$pkg_dir/.git" ]]; then
-        git -C "$pkg_dir" pull --quiet
+        run_with_spinner "Fetching latest changes for $pkg" git -C "$pkg_dir" pull --quiet
     else
         rm -rf "$pkg_dir"
-        git clone --quiet "$AUR_GIT/$pkg.git" "$pkg_dir" || {
+        run_with_spinner "Fetching AUR package: $pkg" git clone --quiet "$AUR_GIT/$pkg.git" "$pkg_dir" || {
             err "Could not clone '$pkg' from the AUR. Does the package name exist?"
             return 1
         }
@@ -150,7 +187,7 @@ flatpak_ensure_remote() {
     if ! flatpak remote-list 2>/dev/null | grep -q "^$FLATPAK_REMOTE"; then
         warn "Flathub remote isn't set up yet."
         confirm "Add the Flathub remote now?" || return 1
-        sudo flatpak remote-add --if-not-exists "$FLATPAK_REMOTE" https://flathub.org/repo/flathub.flatpakrepo
+        run_with_spinner "Adding Flathub remote" sudo flatpak remote-add --if-not-exists "$FLATPAK_REMOTE" https://flathub.org/repo/flathub.flatpakrepo
     fi
     return 0
 }
@@ -196,7 +233,13 @@ cmd_install() {
     [[ $# -eq 0 ]] && { err "Usage: ativ install <package...>"; exit 1; }
 
     local official=() flatpak=() aur=()
+    local i=0 total=$#
     for pkg in "$@"; do
+        i=$((i + 1))
+        if [[ -t 1 && "$COLOR" == true ]]; then
+            printf "\r${C_INFO}%s${C_RESET} Resolving %s ${C_DIM}(%d/%d)${C_RESET}" \
+                "${SPIN_FRAMES[i % ${#SPIN_FRAMES[@]}]}" "$pkg" "$i" "$total"
+        fi
         if pacman -Si "$pkg" >/dev/null 2>&1; then
             official+=("$pkg")
         elif flatpak_available && flatpak_resolve_id "$pkg" >/dev/null 2>&1; then
@@ -205,6 +248,7 @@ cmd_install() {
             aur+=("$pkg")
         fi
     done
+    [[ -t 1 && "$COLOR" == true ]] && printf "\r\033[K"
 
     if [[ ${#official[@]} -gt 0 ]]; then
         info "Installing from official repos: ${official[*]}"
@@ -318,17 +362,25 @@ cmd_upgrade() {
     [[ -z "$foreign" ]] && { ok "No foreign/AUR packages installed."; return; }
 
     local to_upgrade=()
+    local fi=0 ftotal
+    ftotal=$(echo "$foreign" | wc -l)
     while IFS= read -r pkg; do
         [[ -z "$pkg" ]] && continue
+        fi=$((fi + 1))
+        if [[ -t 1 && "$COLOR" == true ]]; then
+            printf "\r${C_INFO}%s${C_RESET} Checking %s ${C_DIM}(%d/%d)${C_RESET}\033[K" \
+                "${SPIN_FRAMES[fi % ${#SPIN_FRAMES[@]}]}" "$pkg" "$fi" "$ftotal"
+        fi
         local installed_ver aur_ver result
         installed_ver=$(pacman -Q "$pkg" 2>/dev/null | awk '{print $2}')
         result=$(aur_info "$pkg")
         aur_ver=$(aur_json_field "$result" Version)
         if [[ -n "$aur_ver" && "$aur_ver" != "$installed_ver" ]]; then
             to_upgrade+=("$pkg")
-            echo "  $pkg: $installed_ver -> $aur_ver"
+            printf "\r\033[K  %s: %s -> %s\n" "$pkg" "$installed_ver" "$aur_ver"
         fi
     done <<< "$foreign"
+    [[ -t 1 && "$COLOR" == true ]] && printf "\r\033[K"
 
     if [[ ${#to_upgrade[@]} -eq 0 ]]; then
         ok "All AUR packages are up to date."
@@ -347,8 +399,7 @@ cmd_os_upgrade() {
     info "Removing old AtivOS folder: $ATIVOS_REPO_DIR"
     rm -rf "$ATIVOS_REPO_DIR"
 
-    info "Fetching latest AtivOS from GitHub"
-    git clone --quiet "$ATIVOS_REPO_URL" "$ATIVOS_REPO_DIR" || {
+    run_with_spinner "Fetching latest AtivOS from GitHub" git clone --quiet "$ATIVOS_REPO_URL" "$ATIVOS_REPO_DIR" || {
         err "Could not clone $ATIVOS_REPO_URL"
         return 1
     }

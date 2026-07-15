@@ -22,6 +22,7 @@ qt_add_qml_module(ativos-oobe
     QML_FILES
         qml/Main.qml
         qml/Theme.qml
+        qml/components/PillButton.qml
         qml/pages/WelcomePage.qml
         qml/pages/LanguagePage.qml
         qml/pages/AppearancePage.qml

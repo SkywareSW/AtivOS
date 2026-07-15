@@ -42,7 +42,7 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             color: Theme.cardBg
-            radius: 10
+            radius: Theme.radiusCard
 
             ListView {
                 id: listView
@@ -56,21 +56,27 @@ Item {
                 delegate: Rectangle {
                     width: listView.width
                     height: 44
-                    radius: 8
-                    color: index === root.selectedIndex ? Theme.accent : "transparent"
+                    radius: Theme.radiusControl
+                    color: index === root.selectedIndex ? Theme.accent
+                         : rowArea.containsMouse ? Qt.rgba(1, 1, 1, 0.05)
+                         : "transparent"
+
+                    Behavior on color { ColorAnimation { duration: Theme.durationFast } }
 
                     Text {
                         anchors.left: parent.left
                         anchors.leftMargin: 14
                         anchors.verticalCenter: parent.verticalCenter
                         text: modelData.label
-                        color: index === root.selectedIndex ? "#0d1117" : Theme.textPrimary
+                        color: index === root.selectedIndex ? Theme.onAccent : Theme.textPrimary
                         font.pixelSize: 14
                         font.bold: index === root.selectedIndex
                     }
 
                     MouseArea {
+                        id: rowArea
                         anchors.fill: parent
+                        hoverEnabled: true
                         onClicked: root.selectedIndex = index
                     }
                 }
