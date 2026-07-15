@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# ativos-set-avatar — installed at /usr/local/bin/ativos-set-avatar
+#
+# Called via pkexec (see org.ativos.oobe.setavatar.policy) from the OOBE
+# app. Copies the chosen image into AccountsService's icon store and points
+# the user's AccountsService record at it, which is what SDDM's Breeze
+# theme reads for the login screen face.
+#
+# Usage: ativos-set-avatar <username> <path-to-image>
+set -euo pipefail
+
+USERNAME="${1:-}"
+IMAGE_PATH="${2:-}"
+
+[[ -n "$USERNAME" && -n "$IMAGE_PATH" ]] || { echo "usage: ativos-set-avatar <username> <image-path>" >&2; exit 1; }
+[[ -f "$IMAGE_PATH" ]] || { echo "no such file: $IMAGE_PATH" >&2; exit 1; }
+id "$USERNAME" >/dev/null 2>&1 || { echo "no such user: $USERNAME" >&2; exit 1; }
+
+ICON_DIR="/var/lib/AccountsService/icons"
+mkdir -p "$ICON_DIR"
+DEST="$ICON_DIR/$USERNAME"
+
+cp "$IMAGE_PATH" "$DEST"
+chmod 644 "$DEST"
+
+OBJ_PATH="$(busctl call org.freedesktop.Accounts /org/freedesktop/Accounts \
+    org.freedesktop.Accounts FindUserByName s "$USERNAME" 2>/dev/null | awk '{print $2}' | tr -d '"')"
+
+if [[ -n "$OBJ_PATH" ]]; then
+    busctl call org.freedesktop.Accounts "$OBJ_PATH" \
+        org.freedesktop.Accounts.User SetIconFile s "$DEST"
+    echo "AccountsService icon updated for $USERNAME"
+else
+    echo "!! Could not resolve AccountsService object path for $USERNAME — icon file was still copied to $DEST" >&2
+fi

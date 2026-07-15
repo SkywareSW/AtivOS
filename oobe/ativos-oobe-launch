@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# ativos-oobe-launch — installed at /usr/bin/ativos-oobe-launch
+#
+# Autostart entry point. Cheap no-op once setup is done, so it's safe to
+# leave in every user's autostart forever rather than editing autostart
+# per-account at install time.
+MARKER="$HOME/.config/ativos/oobe-done"
+[[ -f "$MARKER" ]] && exit 0
+exec /usr/bin/ativos-oobe

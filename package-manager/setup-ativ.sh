@@ -29,6 +29,10 @@ PROTECTED_PACKAGES="base base-devel linux linux-lts linux-firmware systemd glibc
 
 # Where AUR packages are cloned/built (per-user, expanded via $HOME at runtime)
 # BUILD_DIR="$HOME/.cache/ativ/build"
+
+# Used by `ativ os-upgrade` to re-clone and reinstall AtivOS itself
+# ATIVOS_REPO_URL="https://github.com/SkywareSW/AtivOS.git"
+# ATIVOS_REPO_DIR="$HOME/AtivOS"
 EOF
     echo "    Created default config."
 else

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=AtivOS Setup Assistant
+Comment=First-run setup wizard for AtivOS
+Exec=/usr/bin/ativos-oobe-launch
+Icon=ativos-logo
+OnlyShowIn=KDE;
+X-KDE-autostart-phase=1
+NoDisplay=true
+Terminal=false

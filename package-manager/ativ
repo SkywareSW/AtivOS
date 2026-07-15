@@ -15,6 +15,7 @@
 #   ativ info       <pkg>        show details from whichever tier has the package
 #   ativ update                  sync + upgrade official packages
 #   ativ upgrade                 update + upgrade flatpak apps + AUR/foreign packages too
+#   ativ os-upgrade              re-clone AtivOS from GitHub and re-run install-all.sh
 #   ativ list       [flag]       list installed packages (--explicit/--foreign/--flatpak/--all)
 #   ativ autoremove              remove orphaned dependencies
 #   ativ clean       [--all]     clean package cache (+ ativ's AUR build cache)
@@ -36,6 +37,8 @@ NOCONFIRM=false
 PROTECTED_PACKAGES="base base-devel linux linux-lts linux-firmware systemd glibc sudo pacman filesystem"
 BUILD_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ativ/build"
 FLATPAK_REMOTE="flathub"
+ATIVOS_REPO_URL="https://github.com/SkywareSW/AtivOS.git"
+ATIVOS_REPO_DIR="${HOME:-/root}/AtivOS"
 
 [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
 
@@ -338,6 +341,30 @@ cmd_upgrade() {
     done
 }
 
+cmd_os_upgrade() {
+    need_cmd git
+
+    info "Removing old AtivOS folder: $ATIVOS_REPO_DIR"
+    rm -rf "$ATIVOS_REPO_DIR"
+
+    info "Fetching latest AtivOS from GitHub"
+    git clone --quiet "$ATIVOS_REPO_URL" "$ATIVOS_REPO_DIR" || {
+        err "Could not clone $ATIVOS_REPO_URL"
+        return 1
+    }
+
+    cd "$ATIVOS_REPO_DIR" || { err "Could not enter $ATIVOS_REPO_DIR"; return 1; }
+
+    info "Making install-all.sh executable"
+    chmod +x install-all.sh
+
+    info "Running install-all.sh (you may be prompted for your sudo password)"
+    sudo ./install-all.sh
+
+    log_action "os-upgrade: reinstalled AtivOS from $ATIVOS_REPO_URL"
+    ok "AtivOS reinstalled from latest GitHub source."
+}
+
 cmd_list() {
     case "${1:-}" in
         --explicit|-e) pacman -Qe ;;
@@ -451,6 +478,7 @@ Commands:
   info    <pkg>          Show package details from whichever tier has it
   update                 Sync + upgrade official packages
   upgrade                Update official + flatpak apps + AUR/foreign packages
+  os-upgrade              Re-clone AtivOS from GitHub and re-run install-all.sh
   list    [--explicit|--foreign|--flatpak|--all]   List installed packages
   autoremove             Remove orphaned dependencies
   clean   [--all]         Clean package cache
@@ -490,6 +518,7 @@ case "$CMD" in
     info)        cmd_info "$@" ;;
     update)      cmd_update ;;
     upgrade)     cmd_upgrade ;;
+    os-upgrade)  cmd_os_upgrade ;;
     list)        cmd_list "$@" ;;
     autoremove)  cmd_autoremove ;;
     clean)       cmd_clean "$@" ;;

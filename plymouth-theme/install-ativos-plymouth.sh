@@ -29,25 +29,50 @@ cp "$THEME_SRC/progress_fill.png"  "$THEME_DEST/"
 chmod 644 "$THEME_DEST"/*
 
 # ---- 3. add the plymouth hook to mkinitcpio -------------------------------
+# THIS WAS THE BUG: the old version always inserted the "plymouth" hook after
+# "udev". That only works on the legacy busybox/udev-based initramfs. Systems
+# using the systemd-based initramfs (HOOKS=(base systemd ...) — increasingly
+# the default on fresh Arch installs, and required for things like
+# systemd-cryptenroll) have no "udev" hook at all, so the sed never matched,
+# the hook never got added, and plymouth silently never ran at boot. The
+# systemd-based initramfs also needs a different hook name entirely
+# ("sd-plymouth", not "plymouth").
 MKINITCPIO_CONF="/etc/mkinitcpio.conf"
-if ! grep -qE '^HOOKS=.*\bplymouth\b' "$MKINITCPIO_CONF"; then
-    echo "==> Adding 'plymouth' hook to $MKINITCPIO_CONF"
+
+if grep -qE '^HOOKS=\([^)]*\bsystemd\b' "$MKINITCPIO_CONF"; then
+    HOOK_NAME="sd-plymouth"
+    ANCHOR="systemd"
+else
+    HOOK_NAME="plymouth"
+    ANCHOR="udev"
+fi
+
+if grep -qE "^HOOKS=.*\b${HOOK_NAME}\b" "$MKINITCPIO_CONF"; then
+    echo "==> '$HOOK_NAME' hook already present in mkinitcpio.conf"
+else
+    echo "==> Adding '$HOOK_NAME' hook to $MKINITCPIO_CONF (after '$ANCHOR')"
     cp "$MKINITCPIO_CONF" "${MKINITCPIO_CONF}.bak.$(date +%s)"
-    # insert plymouth right after the udev hook, which is where it belongs
-    sed -i -E 's/(HOOKS=\([^)]*\budev\b)/\1 plymouth/' "$MKINITCPIO_CONF"
-    if ! grep -qE '^HOOKS=.*\bplymouth\b' "$MKINITCPIO_CONF"; then
+    sed -i -E "s/(HOOKS=\([^)]*\b${ANCHOR}\b)/\1 ${HOOK_NAME}/" "$MKINITCPIO_CONF"
+    if ! grep -qE "^HOOKS=.*\b${HOOK_NAME}\b" "$MKINITCPIO_CONF"; then
         echo "    Could not auto-edit HOOKS (unexpected format)."
-        echo "    Add 'plymouth' manually to the HOOKS= array in $MKINITCPIO_CONF,"
-        echo "    right after 'udev', then re-run this script."
+        echo "    Add '$HOOK_NAME' manually to the HOOKS= array in $MKINITCPIO_CONF,"
+        echo "    right after '$ANCHOR', then re-run this script."
         exit 1
     fi
-else
-    echo "==> 'plymouth' hook already present in mkinitcpio.conf"
 fi
 
 # ---- 4. set the theme as default -----------------------------------------
 echo "==> Setting AtivOS as the default Plymouth theme"
-plymouth-set-default-theme -R ativos
+plymouth-set-default-theme ativos
+
+# -R above is supposed to rebuild the initramfs, but it only reliably covers
+# the currently-running kernel's preset. Force a full rebuild across every
+# preset in /etc/mkinitcpio.d/ (linux, linux-lts, etc.) so the hook change
+# from step 3 actually lands in whichever image the bootloader boots.
+if command -v mkinitcpio >/dev/null 2>&1; then
+    echo "==> Rebuilding initramfs for all kernel presets"
+    mkinitcpio -P
+fi
 
 # ---- 5. make sure the kernel actually shows the splash --------------------
 # Limine is checked first (the modern default many Arch-based distros,
@@ -58,15 +83,24 @@ LIMINE_DEFAULT="/etc/default/limine"
 GRUB_DEFAULT="/etc/default/grub"
 
 add_cmdline_params() {
-    # appends any of the given params to a KERNEL_CMDLINE[default]+= line
-    # if they aren't already present anywhere in the file
+    # Appends the given params inside the existing KERNEL_CMDLINE[default]="..."
+    # value, or creates that line if it doesn't exist yet. This file gets
+    # `source`d as bash (by /usr/local/bin/limine-update), so the value must
+    # stay a single properly-quoted string — an unquoted multi-word += line
+    # is not valid bash and would break sourcing.
     local params="$1"
-    if ! grep -qE "KERNEL_CMDLINE\[default\].*quiet" "$LIMINE_DEFAULT" || \
-       ! grep -qE "KERNEL_CMDLINE\[default\].*splash" "$LIMINE_DEFAULT"; then
-        echo "KERNEL_CMDLINE[default]+=$params" >> "$LIMINE_DEFAULT"
-        return 0
+    if grep -qE 'KERNEL_CMDLINE\[default\]=.*\bquiet\b' "$LIMINE_DEFAULT" && \
+       grep -qE 'KERNEL_CMDLINE\[default\]=.*\bsplash\b' "$LIMINE_DEFAULT"; then
+        return 1
     fi
-    return 1
+    if grep -qE 'KERNEL_CMDLINE\[default\]=' "$LIMINE_DEFAULT"; then
+        sed -i -E "s/(KERNEL_CMDLINE\[default\]=\")([^\"]*)(\")/\1\2 ${params}\3/" "$LIMINE_DEFAULT"
+    else
+        grep -qE '^\s*declare -A KERNEL_CMDLINE' "$LIMINE_DEFAULT" 2>/dev/null || \
+            echo 'declare -A KERNEL_CMDLINE' >> "$LIMINE_DEFAULT"
+        echo "KERNEL_CMDLINE[default]=\"$params\"" >> "$LIMINE_DEFAULT"
+    fi
+    return 0
 }
 
 if command -v limine-update >/dev/null 2>&1 || [[ -f "$LIMINE_DEFAULT" ]] || command -v limine-entry-tool >/dev/null 2>&1; then
