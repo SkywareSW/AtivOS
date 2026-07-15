@@ -156,6 +156,23 @@ cp /etc/resolv.conf /mnt/etc/resolv.conf 2>/dev/null || true
 # ---- hand off to the chroot stage ---------------------------------------
 install -Dm755 "$SCRIPT_DIR/ativos-chroot-setup.sh" /mnt/root/ativos-chroot-setup.sh
 
+# Stage a copy of the whole local repo (this exact checkout, with whatever
+# fixes are currently in it) into the chroot. ativos-chroot-setup.sh uses
+# this instead of git-cloning from GitHub when installing the full AtivOS
+# stack, so the install no longer silently depends on network access *and*
+# github.com/SkywareSW/AtivOS being reachable/up to date at that exact
+# moment mid-chroot. THIS WAS THE BUG: a failed/slow clone there used to
+# skip the entire branding/plymouth/oobe stack with no visible error.
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [[ -f "$REPO_ROOT/install-all.sh" ]]; then
+    c_info "Staging local AtivOS repo into the chroot"
+    mkdir -p /mnt/root/AtivOS-src
+    cp -a "$REPO_ROOT"/. /mnt/root/AtivOS-src/
+    rm -rf /mnt/root/AtivOS-src/.git
+else
+    c_warn "Couldn't find install-all.sh next to this script — the chroot will fall back to cloning from GitHub instead of using this local copy."
+fi
+
 CONF_FILE=/mnt/root/ativos-install.conf
 umask 077
 cat > "$CONF_FILE" <<EOF

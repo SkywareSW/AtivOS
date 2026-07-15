@@ -155,20 +155,42 @@ c_info "Writing initial /boot/limine.conf"
 /usr/local/bin/limine-update
 
 # ---- optional: full AtivOS stack ----------------------------------------
+STACK_INSTALLED=1
 if [[ "$INSTALL_ATIVOS" =~ ^[Yy]$ ]]; then
-    c_info "Cloning and installing the full AtivOS stack"
     ATIVOS_REPO_URL="https://github.com/SkywareSW/AtivOS.git"
     ATIVOS_REPO_DIR="/home/$USERNAME/AtivOS"
 
-    su - "$USERNAME" -c "git clone --quiet '$ATIVOS_REPO_URL' '$ATIVOS_REPO_DIR'" || {
-        c_err "Could not clone $ATIVOS_REPO_URL — skipping the AtivOS stack. Base Arch install is otherwise complete."
-        ATIVOS_REPO_DIR=""
-    }
+    # Prefer the local copy ativos-install.sh staged at /root/AtivOS-src
+    # (the exact repo you ran the installer from). Only fall back to
+    # cloning from GitHub if that wasn't staged for some reason (e.g. this
+    # script got run standalone, outside the normal install flow).
+    if [[ -d /root/AtivOS-src ]]; then
+        c_info "Installing the full AtivOS stack (from the local copy)"
+        cp -a /root/AtivOS-src "$ATIVOS_REPO_DIR"
+        chown -R "$USERNAME:$USERNAME" "$ATIVOS_REPO_DIR"
+        rm -rf /root/AtivOS-src
+    else
+        c_info "No local copy staged — cloning the AtivOS stack from GitHub"
+        su - "$USERNAME" -c "git clone --quiet '$ATIVOS_REPO_URL' '$ATIVOS_REPO_DIR'" || {
+            c_err "Could not clone $ATIVOS_REPO_URL — skipping the AtivOS stack. Base Arch install is otherwise complete."
+            ATIVOS_REPO_DIR=""
+        }
+    fi
 
     if [[ -n "$ATIVOS_REPO_DIR" && -f "$ATIVOS_REPO_DIR/install-all.sh" ]]; then
         chmod +x "$ATIVOS_REPO_DIR/install-all.sh"
-        bash "$ATIVOS_REPO_DIR/install-all.sh"
+        if ! bash "$ATIVOS_REPO_DIR/install-all.sh"; then
+            STACK_INSTALLED=0
+            c_err "install-all.sh reported one or more failed steps (see output above)."
+        fi
+    else
+        STACK_INSTALLED=0
+        c_err "AtivOS stack was not installed (no repo available). Base Arch install is otherwise complete — after boot, run: sudo bash ~/AtivOS/install-all.sh (you may need to 'git clone $ATIVOS_REPO_URL ~/AtivOS' first)."
     fi
 fi
 
-c_ok "Chroot setup complete."
+if [[ "$INSTALL_ATIVOS" =~ ^[Yy]$ && $STACK_INSTALLED -eq 0 ]]; then
+    c_err "Chroot setup complete, but the AtivOS stack did NOT fully install — see the errors above before rebooting."
+else
+    c_ok "Chroot setup complete."
+fi
