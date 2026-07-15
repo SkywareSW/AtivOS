@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=AtivOS
+Description=AtivOS boot splash - centered logo with a progress bar beneath it
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/ativos
+ScriptFile=/usr/share/plymouth/themes/ativos/ativos.script

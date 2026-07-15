@@ -1,0 +1,78 @@
+// AtivOS Plymouth boot splash
+// Centered logo with a slim progress bar beneath it (macOS/Omarchy style).
+
+# ---- background: dark gradient matching the AtivOS logo palette ----
+Window.SetBackgroundTopColor(0.055, 0.047, 0.086);     // ~#0e0c16
+Window.SetBackgroundBottomColor(0.114, 0.086, 0.184);  // ~#1d1630
+
+screen_width  = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+# ---- logo, centered, slightly above true center ----
+logo.image  = Image("logo.png");
+logo.width  = screen_width * 0.18;
+logo.ratio  = logo.image.GetHeight() / logo.image.GetWidth();
+logo.height = logo.width * logo.ratio;
+logo.image  = logo.image.Scale(logo.width, logo.height);
+logo.sprite = Sprite(logo.image);
+logo.x = screen_width  / 2 - logo.width  / 2;
+logo.y = screen_height / 2 - logo.height / 2 - screen_height * 0.06;
+logo.sprite.SetX(logo.x);
+logo.sprite.SetY(logo.y);
+logo.sprite.SetZ(10);
+
+# ---- progress bar track (rounded pill, scaled uniformly so corners stay round) ----
+track.base  = Image("progress_track.png");
+track.scale = (screen_width * 0.24) / track.base.GetWidth();
+track.width  = track.base.GetWidth()  * track.scale;
+track.height = track.base.GetHeight() * track.scale;
+track.image  = track.base.Scale(track.width, track.height);
+track.sprite = Sprite(track.image);
+track.x = screen_width / 2 - track.width / 2;
+track.y = logo.y + logo.height + screen_height * 0.08;
+track.sprite.SetX(track.x);
+track.sprite.SetY(track.y);
+track.sprite.SetZ(20);
+
+# ---- progress bar fill (plain rect inset inside the track; no corners
+#      needed on the fill itself since the track's rounded ends still show) ----
+fill.base   = Image("progress_fill.png");
+fill.inset  = 3 * track.scale;
+fill.sprite = Sprite();
+fill.sprite.SetZ(21);
+fill.current_progress = 0;
+
+fn draw_fill(progress) {
+    fill.max_width = track.width - fill.inset * 2;
+    fill.w = fill.max_width * progress;
+    if (fill.w < 2) {
+        fill.w = 2;
+    }
+    fill.h = track.height - fill.inset * 2;
+    fill.image = fill.base.Scale(fill.w, fill.h);
+    fill.sprite.SetImage(fill.image);
+    fill.sprite.SetX(track.x + fill.inset);
+    fill.sprite.SetY(track.y + fill.inset);
+}
+
+draw_fill(0);
+
+fn progress_callback(duration, progress) {
+    fill.current_progress = progress;
+    draw_fill(progress);
+}
+
+Plymouth.SetBootProgressFunction(progress_callback);
+
+# ---- keep the splash readable during password prompts / fsck messages ----
+message.sprite = Sprite();
+message.sprite.SetZ(30);
+
+fn message_callback(text) {
+    message.image = Image.Text(text, 1, 1, 1, 1, "Sans 10");
+    message.sprite.SetImage(message.image);
+    message.sprite.SetX(screen_width / 2 - message.image.GetWidth() / 2);
+    message.sprite.SetY(track.y + track.height + screen_height * 0.03);
+}
+
+Plymouth.SetMessageFunction(message_callback);
