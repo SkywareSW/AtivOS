@@ -9,22 +9,29 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Make sure the sub-scripts are executable regardless of how this repo was
+# transferred (unzip and some git configs can strip the +x bit).
+chmod +x "$SCRIPT_DIR"/branding/install-ativos-branding.sh \
+         "$SCRIPT_DIR"/package-manager/setup-ativ.sh \
+         "$SCRIPT_DIR"/package-manager/ativ \
+         "$SCRIPT_DIR"/plymouth-theme/install-ativos-plymouth.sh 2>/dev/null || true
+
 echo "############################################"
 echo "# 1/3 — Branding"
 echo "############################################"
-"$SCRIPT_DIR/branding/install-ativos-branding.sh"
+bash "$SCRIPT_DIR/branding/install-ativos-branding.sh"
 
 echo ""
 echo "############################################"
 echo "# 2/3 — ativ package manager"
 echo "############################################"
-"$SCRIPT_DIR/package-manager/setup-ativ.sh"
+bash "$SCRIPT_DIR/package-manager/setup-ativ.sh"
 
 echo ""
 echo "############################################"
 echo "# 3/3 — Plymouth boot splash"
 echo "############################################"
-"$SCRIPT_DIR/plymouth-theme/install-ativos-plymouth.sh"
+bash "$SCRIPT_DIR/plymouth-theme/install-ativos-plymouth.sh"
 
 echo ""
 echo "==> All AtivOS components installed. Reboot to see the boot splash."
