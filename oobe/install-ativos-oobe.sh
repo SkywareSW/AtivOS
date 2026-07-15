@@ -42,28 +42,11 @@ echo "==> Syncing system"
 pacman -Syu --noconfirm
 
 echo "==> Installing build + runtime dependencies"
-install_pkgs base-devel cmake ninja qt6-base qt6-declarative qt6-svg polkit accountsservice
-
-# Arch's default 'gcc' is now a GCC 16.x major release, and Qt 6.11.1 has
-# known static_assert / SFINAE build failures under GCC 16 (its C++20-by-
-# default dialect shift changed how noexcept destructor specs get deduced
-# for template-heavy Qt containers like QVariantList). Arch ships a 'gcc15'
-# compat package specifically for cases like this — it installs g++-15
-# alongside the system compiler without touching /usr/bin/gcc, so we build
-# just this one app with it instead of waiting on a Qt/GCC fix upstream.
-echo "==> Installing gcc15 (pinned build compiler for Qt6 compatibility)"
-install_pkgs gcc15
-
-CXX_BIN="$(command -v g++-15 || true)"
-if [[ -z "$CXX_BIN" ]]; then
-    echo "!! g++-15 not found after installing gcc15 — check the package's binary name"
-    echo "   with: pacman -Ql gcc15 | grep bin/"
-    exit 1
-fi
+install_pkgs base-devel gcc cmake ninja qt6-base qt6-declarative qt6-svg polkit accountsservice
 
 echo "==> Verifying toolchain/Qt6 versions"
-echo "    building with: $CXX_BIN ($("$CXX_BIN" -dumpversion))"
-echo "    qt6-base:      $(pacman -Qi qt6-base | awk -F': ' '/^Version/{print $2}')"
+echo "    gcc:      $(gcc -dumpversion)"
+echo "    qt6-base: $(pacman -Qi qt6-base | awk -F': ' '/^Version/{print $2}')"
 HEADER_OWNER="$(pacman -Qo /usr/include/qt6/QtCore/qarraydataops.h 2>/dev/null | awk '{print $NF}')"
 if [[ -n "$HEADER_OWNER" && "$HEADER_OWNER" != "qt6-base" ]]; then
     echo "!! Warning: qarraydataops.h is owned by '$HEADER_OWNER', not qt6-base."
@@ -75,13 +58,14 @@ echo "==> Building AtivOS Setup Assistant"
 BUILD_DIR="$(mktemp -d)"
 trap 'rm -rf "$BUILD_DIR"' EXIT
 
-cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="$CXX_BIN"
+cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release
 if ! cmake --build "$BUILD_DIR"; then
     echo ""
-    echo "!! Build failed even with gcc15. If the error mentions a static_assert"
-    echo "   deep inside Qt headers (e.g. qarraydataops.h / is_nothrow_destructible),"
-    echo "   double-check gcc15 actually got picked up above, and that qt6-base"
-    echo "   hasn't since been updated to a version that needs a different fix."
+    echo "!! Build failed. If the error mentions a static_assert deep inside"
+    echo "   Qt headers (e.g. qarraydataops.h / is_nothrow_destructible), check"
+    echo "   for a source file that uses QVariant/QVariantList without directly"
+    echo "   #include <QVariant> — relying on transitive includes for that type"
+    echo "   is fragile and breaks under stricter compiler template checking."
     exit 1
 fi
 
