@@ -1,0 +1,8 @@
+# /etc/udev/rules.d/61-ativos-zram-swap.rules — AtivOS
+#
+# zram-backed swap is fast enough that the kernel should reach for it
+# eagerly instead of hoarding cold pages in RAM — so once zram0 shows up,
+# push vm.swappiness way up. zswap (compressing pages on their way to real
+# disk swap) would otherwise fight zram for the same job, so it's switched
+# off whenever zram is the active swap device.
+KERNEL=="zram0", ACTION=="add", RUN+="/usr/bin/env sh -c 'sysctl -wq vm.swappiness=150; [ -w /sys/module/zswap/parameters/enabled ] && echo 0 > /sys/module/zswap/parameters/enabled'"

@@ -22,7 +22,10 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 56
+        anchors.topMargin: 56
+        anchors.leftMargin: 56
+        anchors.rightMargin: 56
+        anchors.bottomMargin: 92
         spacing: 20
 
         Text {

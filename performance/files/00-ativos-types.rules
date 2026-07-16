@@ -1,0 +1,6 @@
+{"type": "ativos_game", "nice": -5, "sched": "normal", "latency_nice": -8, "ioclass": "best-effort", "ionice": 0}
+{"type": "ativos_browser", "nice": 1, "sched": "normal", "ioclass": "best-effort", "ionice": 4}
+{"type": "ativos_compiler", "nice": 19, "sched": "batch", "ioclass": "idle"}
+{"type": "ativos_heavy_io", "nice": 5, "ioclass": "best-effort", "ionice": 6}
+{"type": "ativos_background", "nice": 19, "sched": "idle", "ioclass": "idle"}
+{"type": "ativos_realtime_audio", "nice": -11, "sched": "normal", "ioclass": "best-effort", "ionice": 0}

@@ -1,0 +1,11 @@
+# /etc/scx_loader.toml — AtivOS
+#
+# scx_loader manages sched_ext (pluggable kernel scheduler) selection.
+# scx_bpfland is a solid all-around desktop default — it prioritizes
+# interactive/foreground tasks, which is exactly what makes a desktop or
+# gaming session feel responsive even under heavy background load.
+#
+# Switch schedulers anytime with `scxctl switch <name>` — no reboot needed;
+# see `scxctl list` for every scheduler scx-scheds ships.
+default_sched = "scx_bpfland"
+default_mode = "Auto"

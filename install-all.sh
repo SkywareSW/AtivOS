@@ -17,7 +17,7 @@ else
     C_RESET=''; C_BOLD=''; C_DIM=''; C_ACCENT=''; C_OK=''; C_ERR=''
 fi
 
-TOTAL_STEPS=6
+TOTAL_STEPS=9
 STEP_NUM=0
 FAILED_STEPS=()
 
@@ -66,6 +66,9 @@ chmod +x "$SCRIPT_DIR"/desktop/install-ativos-kde.sh \
          "$SCRIPT_DIR"/package-manager/ativ \
          "$SCRIPT_DIR"/plymouth-theme/install-ativos-plymouth.sh \
          "$SCRIPT_DIR"/gpu-drivers/install-ativos-gpu-drivers.sh \
+         "$SCRIPT_DIR"/apps/install-ativos-apps.sh \
+         "$SCRIPT_DIR"/performance/install-ativos-performance.sh \
+         "$SCRIPT_DIR"/shell/install-ativos-shell.sh \
          "$SCRIPT_DIR"/oobe/install-ativos-oobe.sh 2>/dev/null || true
 
 banner
@@ -75,6 +78,9 @@ run_step "Branding"                           "$SCRIPT_DIR/branding/install-ativ
 run_step "ativ package manager"               "$SCRIPT_DIR/package-manager/setup-ativ.sh"
 run_step "GPU drivers"                        "$SCRIPT_DIR/gpu-drivers/install-ativos-gpu-drivers.sh"
 run_step "Plymouth boot splash"                "$SCRIPT_DIR/plymouth-theme/install-ativos-plymouth.sh"
+run_step "Default apps (Firefox, Discord, Spotify, fastfetch)" "$SCRIPT_DIR/apps/install-ativos-apps.sh"
+run_step "Performance stack (zram, ananicy-cpp, GameMode, reflector, scx_loader)" "$SCRIPT_DIR/performance/install-ativos-performance.sh"
+run_step "Shell setup (fish + starship for new users)" "$SCRIPT_DIR/shell/install-ativos-shell.sh"
 run_step "First-boot setup assistant (OOBE)"  "$SCRIPT_DIR/oobe/install-ativos-oobe.sh"
 
 echo ""

@@ -1,0 +1,19 @@
+# /etc/udev/rules.d/60-ativos-ioschedulers.rules — AtivOS
+#
+# Matches each disk to the I/O scheduler that suits how it actually
+# behaves, instead of leaving every disk on one kernel-wide default:
+#   - NVMe SSDs are fast and handle their own queuing in hardware, so the
+#     kernel scheduler mostly just adds overhead — "none" gets out of the way.
+#   - SATA/USB SSDs still benefit from a light scheduler that fixes request
+#     ordering: mq-deadline.
+#   - Spinning HDDs benefit most from bfq, which is much better at keeping
+#     the system responsive under heavy sustained disk load.
+
+# NVMe
+ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ATTR{queue/scheduler}="none"
+
+# Non-rotational (SSD) on SATA/USB/etc.
+ACTION=="add|change", KERNEL=="sd[a-z]|mmcblk[0-9]*", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="mq-deadline"
+
+# Rotational (HDD)
+ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="1", ATTR{queue/scheduler}="bfq"

@@ -16,13 +16,18 @@ ApplicationWindow {
     Component.onCompleted: {
         x = (Screen.width - width) / 2
         y = (Screen.height - height) / 2
+        windowOpacity.start()
     }
 
     property var pages: [
         { source: "pages/WelcomePage.qml" },
         { source: "pages/LanguagePage.qml" },
+        { source: "pages/RegionPage.qml" },
         { source: "pages/AppearancePage.qml" },
+        { source: "pages/AccountPage.qml" },
         { source: "pages/NetworkPage.qml" },
+        { source: "pages/GamingPage.qml" },
+        { source: "pages/AppsPage.qml" },
         { source: "pages/PrivacyPage.qml" },
         { source: "pages/AvatarPage.qml" },
         { source: "pages/FinishPage.qml" }
@@ -46,6 +51,18 @@ ApplicationWindow {
             canContinue = true
             stack.replace(pages[pageIndex].source)
         }
+    }
+
+    // ---- gentle fade-in for the whole window on launch -------------------
+    opacity: 0
+    NumberAnimation {
+        id: windowOpacity
+        target: window
+        property: "opacity"
+        from: 0
+        to: 1
+        duration: 420
+        easing.type: Easing.OutCubic
     }
 
     // ---- soft drop shadow behind the rounded panel --------------------
@@ -87,104 +104,109 @@ ApplicationWindow {
             anchors.left: parent.left
             anchors.right: parent.right
             height: 32
+            z: 1
             onPressed: window.startSystemMove()
         }
 
-        ColumnLayout {
+        // ---- page content: fills the entire panel, no bottom bar at all ----
+        StackView {
+            id: stack
             anchors.fill: parent
-            spacing: 0
+            initialItem: pages[0].source
 
-            StackView {
-                id: stack
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                initialItem: pages[0].source
-
-                replaceEnter: Transition {
-                    PropertyAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationMedium }
-                    PropertyAnimation { property: "x"; from: 32; to: 0; duration: Theme.durationSlow; easing.type: Easing.OutCubic }
-                }
-                replaceExit: Transition {
-                    PropertyAnimation { property: "opacity"; from: 1; to: 0; duration: Theme.durationFast }
-                    PropertyAnimation { property: "x"; from: 0; to: -24; duration: Theme.durationFast; easing.type: Easing.InCubic }
+            replaceEnter: Transition {
+                ParallelAnimation {
+                    PropertyAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationSlow; easing.type: Easing.OutCubic }
+                    PropertyAnimation { property: "x"; from: 36; to: 0; duration: Theme.durationSlow; easing.type: Easing.OutCubic }
+                    PropertyAnimation { property: "scale"; from: 0.985; to: 1; duration: Theme.durationSlow; easing.type: Easing.OutCubic }
                 }
             }
+            replaceExit: Transition {
+                ParallelAnimation {
+                    PropertyAnimation { property: "opacity"; from: 1; to: 0; duration: Theme.durationFast }
+                    PropertyAnimation { property: "x"; from: 0; to: -28; duration: Theme.durationFast; easing.type: Easing.InCubic }
+                }
+            }
+        }
 
-            // ---- bottom nav bar --------------------------------------------
-            Rectangle {
-                Layout.fillWidth: true
-                height: 76
-                color: Theme.bgElevated
-                radius: panel.radius
+        // ---- floating back control: a bare chevron, top-left, no button
+        //      chrome at all — appears/disappears with a soft fade+slide ----
+        Item {
+            id: backControl
+            width: 40
+            height: 40
+            x: 20
+            y: 20
+            z: 2
+            visible: opacity > 0.01
+            opacity: (window.pageIndex > 0 && window.pageIndex < window.pages.length - 1) ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.durationMedium; easing.type: Easing.OutCubic } }
 
-                // THE BUG: this bar sits flush against the panel's rounded
-                // bottom edge. `clip: true` on the panel only clips to its
-                // bounding box, not its rounded shape, so this bar's own
-                // (previously square) corners painted straight over where
-                // the panel's rounded bottom-left/bottom-right corners
-                // should have shown, making the whole window look
-                // rounded on top and square on the bottom. Fix: round this
-                // rectangle too, then mask its top corners back to square
-                // with a plain same-color rectangle over the top half —
-                // leaves only the bottom two corners rounded.
+            Text {
+                anchors.centerIn: parent
+                text: "‹"
+                font.pixelSize: 26
+                font.bold: true
+                color: backArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+            }
+            MouseArea {
+                id: backArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: window.goBack()
+            }
+        }
+
+        // ---- floating step dots: tiny, no background/pill/divider behind
+        //      them — just quiet progress feedback sitting on the panel ----
+        Row {
+            id: dots
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: panel.height - 28
+            z: 2
+            spacing: 7
+            opacity: window.pageIndex < window.pages.length - 1 ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.durationMedium } }
+
+            Repeater {
+                model: window.pages.length
                 Rectangle {
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: parent.radius
-                    color: parent.color
+                    width: index === window.pageIndex ? 16 : 5
+                    height: 5
+                    radius: 2.5
+                    color: index === window.pageIndex ? Theme.accent : Qt.rgba(1, 1, 1, 0.16)
+                    Behavior on width { NumberAnimation { duration: Theme.durationMedium; easing.type: Easing.OutBack } }
+                    Behavior on color { ColorAnimation { duration: Theme.durationMedium } }
                 }
+            }
+        }
 
-                Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.divider }
+        // ---- floating continue control: the only "chrome" control left,
+        //      sitting directly on the panel background — no bar behind it ----
+        PillButton {
+            id: nextButton
+            x: panel.width - width - 24
+            y: panel.height - height - 22
+            z: 2
+            primary: true
+            enabled: window.canContinue
+            pillWidth: 132
+            text: window.pageIndex === window.pages.length - 2 ? "Finish Setup"
+                : window.pageIndex === window.pages.length - 1 ? "Get Started"
+                : "Continue"
+            onClicked: window.goNext()
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 28
-                    anchors.rightMargin: 28
-                    spacing: 16
-
-                    PillButton {
-                        text: "Back"
-                        flatStyle: true
-                        pillWidth: 88
-                        visible: pageIndex > 0 && pageIndex < pages.length - 1
-                        onClicked: goBack()
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    // animated capsule step indicator: the active step
-                    // expands into a pill instead of just changing color
-                    Row {
-                        spacing: 8
-                        Layout.alignment: Qt.AlignVCenter
-                        visible: pageIndex < pages.length - 1
-                        Repeater {
-                            model: pages.length
-                            Rectangle {
-                                width: index === pageIndex ? 20 : 6
-                                height: 6
-                                radius: 3
-                                color: index === pageIndex ? Theme.accent : Theme.divider
-                                Behavior on width { NumberAnimation { duration: Theme.durationMedium; easing.type: Easing.OutBack } }
-                                Behavior on color { ColorAnimation { duration: Theme.durationMedium } }
-                            }
-                        }
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    PillButton {
-                        id: nextButton
-                        primary: true
-                        enabled: canContinue
-                        pillWidth: 140
-                        text: pageIndex === pages.length - 2 ? "Finish Setup"
-                            : pageIndex === pages.length - 1 ? "Get Started"
-                            : "Continue"
-                        onClicked: goNext()
-                    }
-                }
+            opacity: 0
+            Component.onCompleted: appear.start()
+            NumberAnimation {
+                id: appear
+                target: nextButton
+                property: "opacity"
+                to: 1
+                duration: Theme.durationSlow
+                easing.type: Easing.OutCubic
             }
         }
     }

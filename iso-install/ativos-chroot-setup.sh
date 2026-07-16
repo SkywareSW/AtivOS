@@ -46,7 +46,9 @@ else
     passwd -l root >/dev/null
 fi
 
-useradd -m -G wheel,audio,video,storage,optical -s /bin/bash "$USERNAME"
+DEFAULT_SHELL=/bin/bash
+[[ "$INSTALL_ATIVOS" =~ ^[Yy]$ ]] && DEFAULT_SHELL=/usr/bin/fish
+useradd -m -G wheel,audio,video,storage,optical -s "$DEFAULT_SHELL" "$USERNAME"
 echo "$USERNAME:$USER_PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 

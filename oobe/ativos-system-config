@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# ativos-system-config — installed at /usr/local/bin/ativos-system-config
+#
+# Called via pkexec (see org.ativos.oobe.systemconfig.policy) from the OOBE
+# app. Handles every system-wide (root-requiring) setting the wizard can
+# touch: hostname, timezone, keyboard layout, full name, password, username
+# rename, and best-effort optional-app installs. Deliberately one helper
+# behind one polkit action rather than one-per-setting, since every branch
+# below is a small, auditable, non-interactive operation.
+#
+# Usage:
+#   ativos-system-config hostname <name>
+#   ativos-system-config timezone <IANA-id>
+#   ativos-system-config keymap <xkb-layout>
+#   ativos-system-config fullname <username> <full name...>
+#   ativos-system-config password                 # username + new password on stdin, one per line
+#   ativos-system-config rename <username> <new-username>
+#   ativos-system-config scheduler <scx-scheduler-name>
+#   ativos-system-config install-apps <manager:pkg> [<manager:pkg> ...]
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "ativos-system-config must run as root (via pkexec)" >&2; exit 1; }
+
+CMD="${1:-}"
+shift || true
+
+case "$CMD" in
+    hostname)
+        NAME="${1:-}"
+        [[ -n "$NAME" ]] || { echo "usage: hostname <name>" >&2; exit 1; }
+        [[ "$NAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]] || { echo "invalid hostname: $NAME" >&2; exit 1; }
+        hostnamectl set-hostname "$NAME"
+        ;;
+
+    timezone)
+        TZ_ID="${1:-}"
+        [[ -n "$TZ_ID" ]] || { echo "usage: timezone <IANA-id>" >&2; exit 1; }
+        [[ -f "/usr/share/zoneinfo/$TZ_ID" ]] || { echo "unknown timezone: $TZ_ID" >&2; exit 1; }
+        timedatectl set-timezone "$TZ_ID"
+        ;;
+
+    keymap)
+        LAYOUT="${1:-}"
+        [[ -n "$LAYOUT" ]] || { echo "usage: keymap <xkb-layout>" >&2; exit 1; }
+        [[ "$LAYOUT" =~ ^[a-z]{2,5}$ ]] || { echo "invalid layout code: $LAYOUT" >&2; exit 1; }
+        localectl set-x11-keymap "$LAYOUT"
+        # Also update the TTY keymap where there's a sane 1:1 match, best-effort.
+        localectl set-keymap "$LAYOUT" 2>/dev/null || true
+        ;;
+
+    fullname)
+        USERNAME="${1:-}"; shift || true
+        FULLNAME="$*"
+        [[ -n "$USERNAME" ]] || { echo "usage: fullname <username> <full name>" >&2; exit 1; }
+        id "$USERNAME" >/dev/null 2>&1 || { echo "no such user: $USERNAME" >&2; exit 1; }
+        chfn -f "$FULLNAME" "$USERNAME"
+        ;;
+
+    password)
+        # Read "username\nnewpassword\n" from stdin — never argv — so the
+        # password never appears in `ps` output.
+        IFS= read -r USERNAME
+        IFS= read -r NEWPASS
+        [[ -n "$USERNAME" && -n "$NEWPASS" ]] || { echo "expected username + password on stdin" >&2; exit 1; }
+        id "$USERNAME" >/dev/null 2>&1 || { echo "no such user: $USERNAME" >&2; exit 1; }
+        echo "${USERNAME}:${NEWPASS}" | chpasswd
+        ;;
+
+    rename)
+        OLDNAME="${1:-}"; NEWNAME="${2:-}"
+        [[ -n "$OLDNAME" && -n "$NEWNAME" ]] || { echo "usage: rename <old> <new>" >&2; exit 1; }
+        [[ "$NEWNAME" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "invalid username: $NEWNAME" >&2; exit 1; }
+        id "$OLDNAME" >/dev/null 2>&1 || { echo "no such user: $OLDNAME" >&2; exit 1; }
+        ! id "$NEWNAME" >/dev/null 2>&1 || { echo "username already taken: $NEWNAME" >&2; exit 1; }
+        OLDHOME="$(getent passwd "$OLDNAME" | cut -d: -f6)"
+        NEWHOME="$(dirname "$OLDHOME")/$NEWNAME"
+        usermod -l "$NEWNAME" -d "$NEWHOME" -m "$OLDNAME"
+        groupmod -n "$NEWNAME" "$OLDNAME" 2>/dev/null || true
+        # AccountsService keys its face icon by username — carry it over so
+        # the login screen picture survives the rename.
+        if [[ -f "/var/lib/AccountsService/icons/$OLDNAME" ]]; then
+            mv "/var/lib/AccountsService/icons/$OLDNAME" "/var/lib/AccountsService/icons/$NEWNAME"
+        fi
+        echo "renamed. a logout/login is required for this to fully take effect."
+        ;;
+
+    scheduler)
+        SCHED="${1:-}"
+        [[ -n "$SCHED" ]] || { echo "usage: scheduler <scx-scheduler-name>" >&2; exit 1; }
+        command -v scxctl >/dev/null 2>&1 || { echo "scxctl not installed" >&2; exit 1; }
+        scxctl switch "$SCHED" || true
+        # Persist as the boot-time default too, not just the live session.
+        if [[ -f /etc/scx_loader.toml ]]; then
+            sed -i "s/^default_sched = .*/default_sched = \"$SCHED\"/" /etc/scx_loader.toml
+        fi
+        ;;
+
+    install-apps)
+        [[ $# -ge 1 ]] || { echo "usage: install-apps <manager:pkg> [...]" >&2; exit 1; }
+        PACMAN_PKGS=()
+        FLATPAK_PKGS=()
+        for spec in "$@"; do
+            manager="${spec%%:*}"
+            pkg="${spec#*:}"
+            case "$manager" in
+                pacman) PACMAN_PKGS+=("$pkg") ;;
+                flatpak) FLATPAK_PKGS+=("$pkg") ;;
+                *) echo "unknown package manager in spec: $spec" >&2 ;;
+            esac
+        done
+        if [[ ${#PACMAN_PKGS[@]} -gt 0 ]]; then
+            pacman -S --needed --noconfirm "${PACMAN_PKGS[@]}"
+        fi
+        if [[ ${#FLATPAK_PKGS[@]} -gt 0 ]]; then
+            flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+            flatpak install -y --noninteractive flathub "${FLATPAK_PKGS[@]}"
+        fi
+        ;;
+
+    *)
+        echo "usage: ativos-system-config <hostname|timezone|keymap|fullname|password|rename|scheduler|install-apps> [args]" >&2
+        exit 1
+        ;;
+esac

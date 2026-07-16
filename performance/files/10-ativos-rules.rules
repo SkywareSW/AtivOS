@@ -1,0 +1,50 @@
+{"name": "steam", "type": "ativos_game"}
+{"name": "steamwebhelper", "type": "ativos_background"}
+{"name": "gameoverlayui", "type": "ativos_game"}
+{"name": "wineserver", "type": "ativos_game"}
+{"name": "wine64-preloader", "type": "ativos_game"}
+{"name": "wine-preloader", "type": "ativos_game"}
+{"name": "lutris", "type": "ativos_game"}
+{"name": "heroic", "type": "ativos_game"}
+{"name": "gamescope", "type": "ativos_game"}
+{"name": "gamemoded", "type": "ativos_game"}
+
+{"name": "firefox", "type": "ativos_browser"}
+{"name": "firefox-bin", "type": "ativos_browser"}
+{"name": "chromium", "type": "ativos_browser"}
+{"name": "Discord", "type": "ativos_browser"}
+{"name": "spotify", "type": "ativos_browser"}
+{"name": "code", "type": "ativos_browser"}
+
+{"name": "cc1", "type": "ativos_compiler"}
+{"name": "cc1plus", "type": "ativos_compiler"}
+{"name": "gcc", "type": "ativos_compiler"}
+{"name": "g++", "type": "ativos_compiler"}
+{"name": "clang", "type": "ativos_compiler"}
+{"name": "clang++", "type": "ativos_compiler"}
+{"name": "rustc", "type": "ativos_compiler"}
+{"name": "ld", "type": "ativos_compiler"}
+{"name": "ld.lld", "type": "ativos_compiler"}
+{"name": "ninja", "type": "ativos_compiler"}
+{"name": "make", "type": "ativos_compiler"}
+{"name": "cargo", "type": "ativos_compiler"}
+{"name": "node", "type": "ativos_compiler"}
+{"name": "webpack", "type": "ativos_compiler"}
+
+{"name": "rsync", "type": "ativos_heavy_io"}
+{"name": "tar", "type": "ativos_heavy_io"}
+{"name": "makepkg", "type": "ativos_heavy_io"}
+{"name": "pacman", "type": "ativos_heavy_io"}
+{"name": "updatedb", "type": "ativos_heavy_io"}
+
+{"name": "baloo_file", "type": "ativos_background"}
+{"name": "baloo_file_extractor", "type": "ativos_background"}
+{"name": "tracker-miner-fs-3", "type": "ativos_background"}
+{"name": "packagekitd", "type": "ativos_background"}
+{"name": "akonadi_control", "type": "ativos_background"}
+{"name": "man", "type": "ativos_background"}
+{"name": "mandb", "type": "ativos_background"}
+
+{"name": "pipewire", "type": "ativos_realtime_audio"}
+{"name": "pipewire-pulse", "type": "ativos_realtime_audio"}
+{"name": "wireplumber", "type": "ativos_realtime_audio"}

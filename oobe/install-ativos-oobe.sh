@@ -2,10 +2,12 @@
 # install-ativos-oobe.sh
 #
 # Builds and installs the AtivOS Setup Assistant: a Qt6/QML first-boot
-# wizard that walks a new user through language, appearance, network,
-# privacy, and an avatar picture. It autostarts once per account (via
-# /etc/xdg/autostart) and marks itself done in ~/.config/ativos/oobe-done
-# so it never shows again after the user finishes it.
+# wizard that walks a new user through language, time zone & keyboard,
+# appearance, account details (name/username/hostname/password), network,
+# gaming & performance defaults, optional apps, privacy, and an avatar
+# picture. It autostarts once per account (via /etc/xdg/autostart) and
+# marks itself done in ~/.config/ativos/oobe-done so it never shows again
+# after the user finishes it.
 #
 set -euo pipefail
 
@@ -53,7 +55,7 @@ echo "==> Syncing system"
 pacman -Syu --noconfirm
 
 echo "==> Installing build + runtime dependencies"
-install_pkgs base-devel gcc cmake ninja qt6-base qt6-declarative qt6-svg polkit accountsservice breeze-icons
+install_pkgs base-devel gcc cmake ninja qt6-base qt6-declarative qt6-svg polkit accountsservice breeze-icons flatpak
 
 echo "==> Verifying toolchain/Qt6 versions"
 echo "    gcc:      $(gcc -dumpversion)"
@@ -90,6 +92,10 @@ install -Dm644 "$SCRIPT_DIR/org.ativos.oobe.desktop" /etc/xdg/autostart/org.ativ
 echo "==> Installing avatar helper + polkit policy"
 install -Dm755 "$SCRIPT_DIR/ativos-set-avatar" /usr/local/bin/ativos-set-avatar
 install -Dm644 "$SCRIPT_DIR/org.ativos.oobe.setavatar.policy" /usr/share/polkit-1/actions/org.ativos.oobe.setavatar.policy
+
+echo "==> Installing system-config helper + polkit policy"
+install -Dm755 "$SCRIPT_DIR/ativos-system-config" /usr/local/bin/ativos-system-config
+install -Dm644 "$SCRIPT_DIR/org.ativos.oobe.systemconfig.policy" /usr/share/polkit-1/actions/org.ativos.oobe.systemconfig.policy
 
 echo ""
 echo "==> AtivOS Setup Assistant installed."

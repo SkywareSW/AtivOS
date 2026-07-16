@@ -38,8 +38,12 @@ qt_add_qml_module(ativos-oobe
         qml/components/PillButton.qml
         qml/pages/WelcomePage.qml
         qml/pages/LanguagePage.qml
+        qml/pages/RegionPage.qml
         qml/pages/AppearancePage.qml
+        qml/pages/AccountPage.qml
         qml/pages/NetworkPage.qml
+        qml/pages/GamingPage.qml
+        qml/pages/AppsPage.qml
         qml/pages/PrivacyPage.qml
         qml/pages/AvatarPage.qml
         qml/pages/FinishPage.qml

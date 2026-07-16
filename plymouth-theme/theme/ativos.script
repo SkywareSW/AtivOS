@@ -1,7 +1,7 @@
 // AtivOS Plymouth boot splash
-// Centered logo with a soft glow, and a smooth glossy pill progress bar
-// underneath (macOS-style: eased motion + a subtle light sweep, rather
-// than a bar that jumps in hard steps).
+// Centered logo with a soft glow, and a minimal black/white pill progress
+// bar underneath: a plain black track (faint outline only) with a fully
+// rounded pure-white fill, eased smoothly rather than jumping in steps.
 
 # ---- background: dark gradient matching the AtivOS logo palette ----
 Window.SetBackgroundTopColor(0.055, 0.047, 0.086);     // ~#0e0c16
@@ -48,20 +48,12 @@ track.sprite.SetX(track.x);
 track.sprite.SetY(track.y);
 track.sprite.SetZ(20);
 
-# ---- progress bar fill: a proper rounded capsule (both ends already round
-#      in the source image), scaled only in width so its corner radius stays
-#      visually consistent instead of a flat rectangle inside a round track ----
+# ---- progress bar fill: a plain rounded white capsule, inset by a hairline
+#      so the black track's faint outline stays visible all the way around ----
 fill.base   = Image("progress_fill.png");
 fill.inset  = 2 * track.scale;
 fill.sprite = Sprite();
 fill.sprite.SetZ(21);
-
-# ---- shine: a soft light sweep clamped so it never travels past the
-#      currently-filled width — gives the bar a bit of life without ever
-#      overlapping the still-empty part of the track ----
-shine.base   = Image("progress_shine.png");
-shine.sprite = Sprite();
-shine.sprite.SetZ(22);
 
 fun draw_fill(progress) {
     fill.max_width = track.width - fill.inset * 2;
@@ -74,37 +66,10 @@ fun draw_fill(progress) {
     fill.sprite.SetImage(fill.image);
     fill.sprite.SetX(track.x + fill.inset);
     fill.sprite.SetY(track.y + fill.inset);
-
-    # shine only when there's enough filled width for it to read as a sweep
-    shine.min_width_to_show = 22;
-    if (fill.w > shine.min_width_to_show) {
-        shine.w = shine.base.GetWidth() * track.scale;
-        if (shine.w > fill.w * 0.9) {
-            shine.w = fill.w * 0.9;
-        }
-        shine.h = fill.h;
-        shine.image = shine.base.Scale(shine.w, shine.h);
-        shine.sprite.SetImage(shine.image);
-        shine.sprite.SetOpacity(1);
-
-        shine.range = fill.w - shine.w;
-        shine.raw   = shine.tick * 0.035;
-        shine.phase = shine.raw - Math.Int(shine.raw / 2) * 2;  // 0..2 sawtooth
-        if (shine.phase > 1) {
-            shine.pos = 2 - shine.phase;  // ping-pong back
-        } else {
-            shine.pos = shine.phase;
-        }
-        shine.sprite.SetX(track.x + fill.inset + shine.range * shine.pos);
-        shine.sprite.SetY(track.y + fill.inset);
-    } else {
-        shine.sprite.SetOpacity(0);
-    }
 }
 
 fill.target_progress  = 0;
 fill.display_progress = 0;
-shine.tick = 0;
 
 draw_fill(0);
 
@@ -124,8 +89,6 @@ splash.quitting       = 0;
 splash.fade_out_ticks = 16;
 
 fun refresh_callback() {
-    shine.tick = shine.tick + 1;
-
     # ease the visible fill toward the real target — a gentle exponential
     # smoothing so progress glides rather than snapping between values
     fill.display_progress = fill.display_progress + (fill.target_progress - fill.display_progress) * 0.12;
