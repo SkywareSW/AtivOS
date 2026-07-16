@@ -68,11 +68,32 @@ install_pkgs \
     plasma-systemmonitor \
     print-manager \
     xdg-desktop-portal-kde \
-    qt6-imageformats
+    qt6-imageformats \
+    layer-shell-qt6
 
 info "Enabling SDDM"
 systemctl enable sddm >/dev/null
 ok "SDDM enabled"
+
+# THE BUG: SDDM's own greeter runs under X11 by default, regardless of
+# which session type (X11/Wayland) the user picks afterward — this has to
+# be explicitly overridden. On systems where the Xorg/vmwgfx interaction
+# is broken (a long-standing class of VMware guest bug: crashes on GB
+# surface creation, "failed to create vmw_framebuffer: -22"), that default
+# X11 greeter is what actually hangs at boot with a blank screen and a
+# blinking cursor — even on an otherwise fully-Wayland Plasma setup. Force
+# the greeter itself onto Wayland too, so it never touches that code path.
+info "Configuring SDDM to use a Wayland greeter"
+mkdir -p /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/09-ativos-wayland-greeter.conf <<'EOF'
+[General]
+DisplayServer=wayland
+GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
+
+[Wayland]
+CompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts
+EOF
+ok "SDDM greeter set to Wayland (kwin_wayland)"
 
 info "Setting Breeze Dark as the SDDM login theme"
 mkdir -p /etc/sddm.conf.d
