@@ -35,6 +35,17 @@ install_pkgs() {
     fi
 }
 
+# A pacman transaction interrupted in an earlier step (e.g. an AUR build)
+# can leave a stale lock file that fails every pacman call afterwards —
+# including the two below — which would silently stop this script before
+# it ever builds/installs the OOBE binary. Only clear it if nothing is
+# actually mid-transaction.
+PACMAN_LOCK=/var/lib/pacman/db.lck
+if [[ -f "$PACMAN_LOCK" ]] && ! pgrep -x pacman >/dev/null 2>&1; then
+    echo "==> Removing stale pacman lock ($PACMAN_LOCK, no pacman process running)"
+    rm -f "$PACMAN_LOCK"
+fi
+
 # A partial/out-of-sync system is the #1 cause of gcc/qt6-base ABI and
 # header-vs-library mismatches. Force a full sync before installing anything
 # new so all packages come from the same repo snapshot.

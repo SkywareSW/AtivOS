@@ -42,7 +42,7 @@ fill.sprite = Sprite();
 fill.sprite.SetZ(21);
 fill.current_progress = 0;
 
-fn draw_fill(progress) {
+fun draw_fill(progress) {
     fill.max_width = track.width - fill.inset * 2;
     fill.w = fill.max_width * progress;
     if (fill.w < 2) {
@@ -57,7 +57,7 @@ fn draw_fill(progress) {
 
 draw_fill(0);
 
-fn progress_callback(duration, progress) {
+fun progress_callback(duration, progress) {
     fill.current_progress = progress;
     draw_fill(progress);
 }
@@ -68,7 +68,7 @@ Plymouth.SetBootProgressFunction(progress_callback);
 message.sprite = Sprite();
 message.sprite.SetZ(30);
 
-fn message_callback(text) {
+fun message_callback(text) {
     message.image = Image.Text(text, 1, 1, 1, 1, "Sans 10");
     message.sprite.SetImage(message.image);
     message.sprite.SetX(screen_width / 2 - message.image.GetWidth() / 2);
