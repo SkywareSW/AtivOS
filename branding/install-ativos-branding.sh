@@ -97,17 +97,48 @@ cp /etc/issue /etc/issue.net
 # =========================================================================
 # 1b. Limine boot menu entry name
 #
-#     THE BUG: on systems using limine-entry-tool / limine-mkinitcpio-hook
-#     (the standard Limine kernel-entry manager on Arch and Arch-based
-#     distros like CachyOS), the boot menu title comes from TARGET_OS_NAME
-#     in /etc/default/limine — NOT from /etc/os-release. If that variable
-#     is unset (the default), the tool falls back to the hardcoded name
-#     "Arch Linux", which is why entries kept showing "Arch Linux (linux)"
-#     no matter what os-release said. Renaming is safe at any time — entries
-#     are tracked by machine-id, not by name.
+#     THE BUG (round 1): on systems using limine-entry-tool /
+#     limine-mkinitcpio-hook (an AUR convenience tool some distros ship),
+#     the boot title comes from TARGET_OS_NAME in /etc/default/limine.
+#     THE BUG (round 2, this one): archinstall's own built-in Limine
+#     support doesn't use that tool at all — it writes /boot/limine.conf
+#     (or an ESP-relative equivalent) directly at install time, as a
+#     static file, with "Arch Linux" hardcoded in the title. There's no
+#     env file, no regeneration mechanism, nothing for TARGET_OS_NAME to
+#     hook into — so on an archinstall + Limine system, the entire block
+#     below used to just print "No Limine entry tool detected — skipping"
+#     and do nothing. Renaming a Limine entry title is safe at any time;
+#     entries are tracked by machine-id, not by name.
 # =========================================================================
 echo "==> Configuring Limine boot menu entry name"
 
+# Locate the actual config file on disk, regardless of which mechanism (if
+# any) manages it — this is what actually matters for archinstall-style
+# native Limine installs.
+LIMINE_CONF=""
+for c in /boot/limine.conf /boot/EFI/limine/limine.conf /boot/limine/limine.conf \
+         /efi/limine.conf /efi/EFI/limine/limine.conf /efi/limine/limine.conf; do
+    [[ -f "$c" ]] && LIMINE_CONF="$c" && break
+done
+if [[ -z "$LIMINE_CONF" ]]; then
+    LIMINE_CONF="$(find /boot /efi -maxdepth 4 -iname 'limine.conf' 2>/dev/null | head -1)"
+fi
+
+if [[ -n "$LIMINE_CONF" ]]; then
+    echo "    Found $LIMINE_CONF"
+    cp "$LIMINE_CONF" "${LIMINE_CONF}.bak.$(date +%s)" 2>/dev/null || true
+    if grep -q 'Arch Linux' "$LIMINE_CONF"; then
+        sed -i 's/Arch Linux/AtivOS/g' "$LIMINE_CONF"
+        echo "    Renamed entries in $LIMINE_CONF to \"AtivOS\""
+    else
+        echo "    $LIMINE_CONF already says \"AtivOS\" (or uses a custom title)"
+    fi
+else
+    echo "    No limine.conf found on disk — skipping direct rename."
+fi
+
+# If the AUR limine-entry-tool ecosystem IS present, also configure it so
+# entries stay renamed across future regenerations.
 LIMINE_DEFAULT="/etc/default/limine"
 if command -v limine-entry-tool >/dev/null 2>&1 || [[ -f "$LIMINE_DEFAULT" ]] || [[ -f /etc/limine-entry-tool.conf ]]; then
     if [[ ! -f "$LIMINE_DEFAULT" ]]; then
@@ -124,14 +155,7 @@ if command -v limine-entry-tool >/dev/null 2>&1 || [[ -f "$LIMINE_DEFAULT" ]] ||
     else
         echo 'TARGET_OS_NAME="AtivOS"' >> "$LIMINE_DEFAULT"
     fi
-    echo "    Set TARGET_OS_NAME=\"AtivOS\" in $LIMINE_DEFAULT"
-
-    # Also sweep any already-generated limine.conf so the rename is visible
-    # immediately, without waiting on the next kernel install/update to
-    # trigger regeneration.
-    for conf in /boot/limine.conf /boot/EFI/limine/limine.conf /boot/limine/limine.conf; do
-        [[ -f "$conf" ]] && sed -i 's/Arch Linux/AtivOS/g' "$conf" 2>/dev/null || true
-    done
+    echo "    Set TARGET_OS_NAME=\"AtivOS\" in $LIMINE_DEFAULT (for future regenerations via limine-entry-tool)"
 
     if command -v limine-mkinitcpio >/dev/null 2>&1; then
         echo "    Regenerating Limine entries via limine-mkinitcpio"
@@ -139,12 +163,7 @@ if command -v limine-entry-tool >/dev/null 2>&1 || [[ -f "$LIMINE_DEFAULT" ]] ||
     elif command -v limine-update >/dev/null 2>&1; then
         echo "    Regenerating Limine entries via limine-update"
         limine-update || true
-    else
-        echo "    No limine-mkinitcpio/limine-update found — entries already patched in place;"
-        echo "    they'll read \"AtivOS\" from here on once regenerated."
     fi
-else
-    echo "    No Limine entry tool detected — skipping."
 fi
 
 # =========================================================================

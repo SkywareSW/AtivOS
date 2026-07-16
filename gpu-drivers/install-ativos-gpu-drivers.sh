@@ -129,6 +129,35 @@ if [[ $HAS_VM -eq 1 && $HAS_NVIDIA -eq 0 && $HAS_AMD -eq 0 && $HAS_INTEL -eq 0 ]
     else
         install_pkgs mesa
     fi
+
+    # THE BUG: on VMware specifically, the vmwgfx DRM/KMS driver often
+    # isn't ready early enough via mkinitcpio's generic 'autodetect' hook
+    # alone — this is a documented quirk (see the ArchWiki VMware guest
+    # page), not something specific to our Plymouth theme. Without it,
+    # Plymouth has no working KMS device to draw on and falls back to a
+    # blank text console with a blinking cursor for the rest of boot,
+    # until SDDM's own display server takes over later. Forcing the
+    # module into the initramfs's MODULES array (same fix distros like
+    # Omarchy effectively get via their hook ordering) gives it time to
+    # initialize before Plymouth needs it.
+    VM_KMS_MODULE=""
+    for line in "${GPU_LINES[@]}"; do
+        echo "$line" | grep -qi '\[15ad:' && VM_KMS_MODULE="vmwgfx"
+        echo "$line" | grep -qi '\[80ee:' && VM_KMS_MODULE="vboxvideo"
+    done
+
+    if [[ -n "$VM_KMS_MODULE" ]] && ! grep -qE "^MODULES=\([^)]*\b${VM_KMS_MODULE}\b" /etc/mkinitcpio.conf; then
+        echo "==> Enabling early KMS for $VM_KMS_MODULE in mkinitcpio.conf"
+        cp /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
+        if grep -qE '^MODULES=\(\s*\)' /etc/mkinitcpio.conf; then
+            sed -i -E "s/^MODULES=\(\s*\)/MODULES=($VM_KMS_MODULE)/" /etc/mkinitcpio.conf
+        else
+            sed -i -E "s/^MODULES=\(([^)]*)\)/MODULES=(\1 $VM_KMS_MODULE)/" /etc/mkinitcpio.conf
+        fi
+        NEEDS_REBUILD=1
+    elif [[ -n "$VM_KMS_MODULE" ]]; then
+        echo "    $VM_KMS_MODULE already in MODULES= in mkinitcpio.conf"
+    fi
     echo ""
 fi
 

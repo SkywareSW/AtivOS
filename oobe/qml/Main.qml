@@ -62,7 +62,7 @@ ApplicationWindow {
                 anchors.centerIn: parent
                 width: parent.width - (7 - index) * 5
                 height: parent.height - (7 - index) * 5
-                radius: Theme.radiusWindow + (parent.width - width) / 2
+                radius: 22 + (parent.width - width) / 2
                 color: "transparent"
                 border.width: 3
                 border.color: Qt.rgba(0, 0, 0, 0.05 - index * 0.004)
@@ -74,7 +74,7 @@ ApplicationWindow {
     Rectangle {
         id: panel
         anchors.fill: parent
-        radius: Theme.radiusWindow
+        radius: 22
         color: Theme.bg
         clip: true
         border.width: 1

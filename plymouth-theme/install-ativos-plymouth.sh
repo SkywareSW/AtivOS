@@ -104,6 +104,19 @@ fi
 LIMINE_DEFAULT="/etc/default/limine"
 GRUB_DEFAULT="/etc/default/grub"
 
+# Locate the real limine.conf on disk, if one exists — this is what
+# actually matters for archinstall's native Limine installs, which write
+# this file directly at install time with no limine-entry-tool/AUR layer
+# on top at all.
+LIMINE_CONF=""
+for c in /boot/limine.conf /boot/EFI/limine/limine.conf /boot/limine/limine.conf \
+         /efi/limine.conf /efi/EFI/limine/limine.conf /efi/limine/limine.conf; do
+    [[ -f "$c" ]] && LIMINE_CONF="$c" && break
+done
+if [[ -z "$LIMINE_CONF" ]]; then
+    LIMINE_CONF="$(find /boot /efi -maxdepth 4 -iname 'limine.conf' 2>/dev/null | head -1)"
+fi
+
 add_cmdline_params() {
     # Appends the given params inside the existing KERNEL_CMDLINE[default]="..."
     # value, or creates that line if it doesn't exist yet. This file gets
@@ -125,36 +138,58 @@ add_cmdline_params() {
     return 0
 }
 
-if command -v limine-update >/dev/null 2>&1 || [[ -f "$LIMINE_DEFAULT" ]] || command -v limine-entry-tool >/dev/null 2>&1; then
+# THE BUG: this whole branch used to only fire (and only ever touched
+# /etc/default/limine) if limine-entry-tool/limine-update/limine-mkinitcpio
+# were present. archinstall's built-in Limine support doesn't use any of
+# those — it writes /boot/limine.conf (or an ESP-relative equivalent)
+# directly, as a static file, so this branch was never actually reaching
+# the file that mattered on a plain archinstall + Limine system.
+if [[ -n "$LIMINE_CONF" ]] || command -v limine-update >/dev/null 2>&1 || [[ -f "$LIMINE_DEFAULT" ]] || command -v limine-entry-tool >/dev/null 2>&1; then
     echo "==> Limine detected — configuring kernel command line"
 
-    if [[ ! -f "$LIMINE_DEFAULT" ]]; then
-        if [[ -f /etc/limine-entry-tool.conf ]]; then
-            cp /etc/limine-entry-tool.conf "$LIMINE_DEFAULT"
+    # Direct approach: patch the real config file's cmdline: lines. This is
+    # what actually matters for archinstall-style native Limine installs.
+    if [[ -n "$LIMINE_CONF" ]]; then
+        echo "    Found $LIMINE_CONF"
+        cp "$LIMINE_CONF" "${LIMINE_CONF}.bak.$(date +%s)"
+        if grep -qE '^\s*cmdline:.*\bquiet\b' "$LIMINE_CONF" && grep -qE '^\s*cmdline:.*\bsplash\b' "$LIMINE_CONF"; then
+            echo "    'quiet splash' already present in $LIMINE_CONF"
+        elif grep -qE '^\s*cmdline:' "$LIMINE_CONF"; then
+            sed -i -E 's/^([[:space:]]*cmdline:[[:space:]]*.*)$/\1 quiet splash/' "$LIMINE_CONF"
+            echo "    Added 'quiet splash' directly to cmdline: line(s) in $LIMINE_CONF"
         else
-            touch "$LIMINE_DEFAULT"
+            echo "    No 'cmdline:' key found in $LIMINE_CONF — check its entry format manually."
         fi
     fi
 
-    cp "$LIMINE_DEFAULT" "${LIMINE_DEFAULT}.bak.$(date +%s)"
+    # Tool-based approach: only relevant if the limine-entry-tool/AUR
+    # ecosystem is actually present, so future kernel updates stay
+    # splash-enabled too (not needed for archinstall's native setup, which
+    # has no such regeneration mechanism to configure).
+    if command -v limine-update >/dev/null 2>&1 || [[ -f "$LIMINE_DEFAULT" ]] || command -v limine-entry-tool >/dev/null 2>&1; then
+        if [[ ! -f "$LIMINE_DEFAULT" ]]; then
+            if [[ -f /etc/limine-entry-tool.conf ]]; then
+                cp /etc/limine-entry-tool.conf "$LIMINE_DEFAULT"
+            else
+                touch "$LIMINE_DEFAULT"
+            fi
+        fi
 
-    if add_cmdline_params "quiet splash"; then
-        echo "    Added 'quiet splash' to KERNEL_CMDLINE[default] in $LIMINE_DEFAULT"
-    else
-        echo "    'quiet splash' already present in $LIMINE_DEFAULT"
-    fi
+        cp "$LIMINE_DEFAULT" "${LIMINE_DEFAULT}.bak.$(date +%s)"
 
-    if command -v limine-update >/dev/null 2>&1; then
-        echo "==> Running limine-update (refreshes limine.conf entries with the new cmdline)"
-        limine-update
-    elif command -v limine-mkinitcpio >/dev/null 2>&1; then
-        echo "==> Running limine-mkinitcpio (refreshes limine.conf entries with the new cmdline)"
-        limine-mkinitcpio -P
-    else
-        echo "    No limine-update/limine-mkinitcpio found — install limine-mkinitcpio-hook"
-        echo "    (AUR) for automatic entry management, or edit /boot/limine.conf (or"
-        echo "    /boot/limine/limine.conf) by hand and add 'quiet splash' to each"
-        echo "    entry's cmdline: line."
+        if add_cmdline_params "quiet splash"; then
+            echo "    Added 'quiet splash' to KERNEL_CMDLINE[default] in $LIMINE_DEFAULT"
+        else
+            echo "    'quiet splash' already present in $LIMINE_DEFAULT"
+        fi
+
+        if command -v limine-update >/dev/null 2>&1; then
+            echo "==> Running limine-update (refreshes limine.conf entries with the new cmdline)"
+            limine-update
+        elif command -v limine-mkinitcpio >/dev/null 2>&1; then
+            echo "==> Running limine-mkinitcpio (refreshes limine.conf entries with the new cmdline)"
+            limine-mkinitcpio -P
+        fi
     fi
 
 elif [[ -f "$GRUB_DEFAULT" ]]; then
