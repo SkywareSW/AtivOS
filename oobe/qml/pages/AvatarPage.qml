@@ -9,6 +9,7 @@ Item {
     id: root
     property url avatarPath: ""
     property bool saved: false
+    property var presetAvatars: Backend.availablePresetAvatars()
 
     Component.onCompleted: window.canContinue = true
 
@@ -24,6 +25,7 @@ Item {
 
     ColumnLayout {
         anchors.centerIn: parent
+        width: Math.min(parent.width * 0.86, 460)
         spacing: 24
 
         Text {
@@ -35,7 +37,10 @@ Item {
         }
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "This appears on the login screen and in System Settings. Optional."
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            text: "This appears on the login screen and in System Settings. Pick one below, or upload your own. Optional."
             color: Theme.textSecondary
             font.pixelSize: 13
         }
@@ -80,8 +85,62 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             flatStyle: true
             pillWidth: 240
-            text: root.avatarPath == "" ? "Choose Picture…" : "Choose a Different Picture…"
+            text: root.avatarPath == "" ? "Upload a Picture…" : "Upload a Different Picture…"
             onClicked: fileDialog.open()
+        }
+
+        // ---- preset picker ----------------------------------------------
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 4
+            spacing: 12
+            visible: root.presetAvatars.length > 0
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: "Or choose one"
+                color: Theme.textSecondary
+                font.pixelSize: 13
+            }
+
+            Flow {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 14
+
+                Repeater {
+                    model: root.presetAvatars
+
+                    Rectangle {
+                        id: presetTile
+                        width: 64; height: 64; radius: 32
+                        color: Theme.cardBg
+                        clip: true
+                        border.width: 2
+                        border.color: root.avatarPath == modelData ? Theme.accent : Theme.divider
+                        scale: presetArea.pressed ? Theme.pressScale : (presetArea.containsMouse ? Theme.hoverScale : 1.0)
+
+                        Behavior on scale { NumberAnimation { duration: Theme.durationFast; easing.type: Easing.OutCubic } }
+                        Behavior on border.color { ColorAnimation { duration: Theme.durationMedium } }
+
+                        Image {
+                            anchors.fill: parent
+                            source: modelData
+                            fillMode: Image.PreserveAspectCrop
+                        }
+
+                        MouseArea {
+                            id: presetArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: {
+                                root.avatarPath = modelData
+                                root.saved = Backend.setAvatar(modelData)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

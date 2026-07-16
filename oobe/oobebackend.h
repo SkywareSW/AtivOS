@@ -71,6 +71,10 @@ public:
     // helper.
     Q_INVOKABLE bool setAvatar(const QString &localFilePath);
 
+    // Built-in avatar choices bundled into the app (assets/avatars/*),
+    // returned as qrc:// URLs the QML picker can display directly.
+    Q_INVOKABLE QVariantList availablePresetAvatars() const;
+
     // Called on the last page — marks first-run complete so the autostart
     // launcher won't show this again, then quits.
     Q_INVOKABLE void finish();

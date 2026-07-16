@@ -3,9 +3,9 @@
 // bar underneath: a plain black track (faint outline only) with a fully
 // rounded pure-white fill, eased smoothly rather than jumping in steps.
 
-# ---- background: dark gradient matching the AtivOS logo palette ----
-Window.SetBackgroundTopColor(0.055, 0.047, 0.086);     // ~#0e0c16
-Window.SetBackgroundBottomColor(0.114, 0.086, 0.184);  // ~#1d1630
+# ---- background: solid black ----
+Window.SetBackgroundTopColor(0, 0, 0);     // #000000
+Window.SetBackgroundBottomColor(0, 0, 0);  // #000000
 
 screen_width  = Window.GetWidth();
 screen_height = Window.GetHeight();

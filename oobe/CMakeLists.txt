@@ -29,6 +29,21 @@ set_source_files_properties(qml/Theme.qml PROPERTIES
     QT_QML_SINGLETON_TYPE true
 )
 
+# Preset avatars: anything dropped into assets/avatars/ gets picked up
+# automatically on the next `cmake` configure — no need to list files here
+# by name. Re-run cmake (or just rebuild via the install script, which
+# always configures fresh) after adding new images.
+file(GLOB AVATAR_PRESET_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/*.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/*.jpg"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/*.jpeg"
+)
+set(AVATAR_PRESET_RESOURCES "")
+foreach(_avatar_file ${AVATAR_PRESET_FILES})
+    file(RELATIVE_PATH _avatar_rel "${CMAKE_CURRENT_SOURCE_DIR}" "${_avatar_file}")
+    list(APPEND AVATAR_PRESET_RESOURCES "${_avatar_rel}")
+endforeach()
+
 qt_add_qml_module(ativos-oobe
     URI org.ativos.oobe
     VERSION 1.0
@@ -49,6 +64,7 @@ qt_add_qml_module(ativos-oobe
         qml/pages/FinishPage.qml
     RESOURCES
         assets/logo.png
+        ${AVATAR_PRESET_RESOURCES}
 )
 
 target_link_libraries(ativos-oobe PRIVATE

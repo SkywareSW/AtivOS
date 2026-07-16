@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
@@ -9,9 +10,16 @@
 #include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTemporaryFile>
 #include <QTextStream>
 #include <QVariantList>
 #include <QVariantMap>
+
+namespace {
+// Where the preset avatar images live inside the Qt resource system, per
+// qt_add_qml_module's URI-derived resource path (org.ativos.oobe -> org/ativos/oobe).
+const char *kPresetAvatarResourceDir = ":/qt/qml/org/ativos/oobe/assets/avatars";
+}
 
 namespace {
 
@@ -508,6 +516,20 @@ void OobeBackend::setTelemetry(bool enabled)
     settings.sync();
 }
 
+QVariantList OobeBackend::availablePresetAvatars() const
+{
+    QVariantList result;
+    QDirIterator it(QString::fromLatin1(kPresetAvatarResourceDir), QStringList{"*.png", "*.jpg", "*.jpeg"},
+                     QDir::Files, QDirIterator::NoIteratorFlags);
+    while (it.hasNext()) {
+        it.next();
+        // Files baked in via qt_add_qml_module's RESOURCES live under ":/qt/qml/...";
+        // QML wants the "qrc:" URL scheme form of that same path.
+        result.append(QStringLiteral("qrc") + it.filePath());
+    }
+    return result;
+}
+
 bool OobeBackend::setAvatar(const QString &localFilePath)
 {
     QString path = localFilePath;
@@ -515,6 +537,27 @@ bool OobeBackend::setAvatar(const QString &localFilePath)
     if (path.startsWith(QStringLiteral("file://"))) {
         path = path.mid(7);
     }
+
+    // Built-in presets are baked into the binary's Qt resource system and
+    // arrive here as "qrc:/..." URLs — not real files on disk, so the
+    // pkexec helper below can't read them directly. Copy the bytes out to
+    // a real temp file first and continue as if that were the chosen file.
+    QTemporaryFile presetExtract;
+    if (path.startsWith(QStringLiteral("qrc:"))) {
+        const QString resourcePath = path.mid(3); // "qrc:/foo" -> ":/foo"
+        QFile resourceFile(resourcePath);
+        if (!resourceFile.open(QIODevice::ReadOnly)) {
+            return false;
+        }
+        presetExtract.setFileTemplate(QDir::tempPath() + QStringLiteral("/ativos-avatar-XXXXXX.png"));
+        if (!presetExtract.open()) {
+            return false;
+        }
+        presetExtract.write(resourceFile.readAll());
+        presetExtract.close();
+        path = presetExtract.fileName();
+    }
+
     if (!QFile::exists(path)) {
         return false;
     }

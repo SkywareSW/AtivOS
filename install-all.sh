@@ -32,7 +32,7 @@ banner() {
    / ___ \ |_| |\ V / | |_| |___) |
   /_/   \_\__|_| \_/   \___/|____/
 EOF
-    printf "${C_RESET}${C_DIM}  installing your system, step by step${C_RESET}\n\n"
+    printf "${C_RESET}${C_DIM}  ${C_RESET}\n\n"
 }
 
 step_header() {
