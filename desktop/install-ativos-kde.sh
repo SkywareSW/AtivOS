@@ -43,6 +43,80 @@ install_pkgs() {
     fi
 }
 
+warn() { printf "${C_ACCENT}  !!${C_RESET} %s\n" "$*"; }
+
+# ---------------------------------------------------------------------------
+# 0. Bootstrap yay + the Limine AUR tooling (limine-entry-tool /
+#    limine-mkinitcpio-hook) right here in step 1.
+#
+#    THE BUG: nothing in this repo ever installed these. Later steps
+#    (branding, plymouth) already had code paths that USE `limine-mkinitcpio`
+#    / `limine-update` if present (to regenerate /boot/limine.conf and keep
+#    it splash/title-correct across future kernel updates), but since
+#    nothing ever installed them, `command -v limine-mkinitcpio` was always
+#    false and those code paths were silently dead — the boot splash and
+#    branding steps fell back to one-shot direct file edits that never get
+#    refreshed on the next kernel update. Installing yay + the Limine AUR
+#    tools here, in step 1, guarantees they exist before step 2 (branding)
+#    and step 5 (Plymouth) — the first steps that look for them.
+#
+#    makepkg/yay refuse to run as root, so the actual build has to happen
+#    as a normal user. We use whoever invoked `sudo` ($SUDO_USER), falling
+#    back to the first regular (UID >= 1000) account if that's unset. This
+#    whole block is best-effort: on failure it warns and moves on rather
+#    than aborting the KDE install (that's a separate concern), since
+#    branding/plymouth already have non-AUR fallbacks either way.
+# ---------------------------------------------------------------------------
+info "Bootstrapping yay + Limine AUR tooling"
+
+BUILD_USER="${SUDO_USER:-}"
+if [[ -z "$BUILD_USER" || "$BUILD_USER" == "root" ]]; then
+    BUILD_USER="$(logname 2>/dev/null || true)"
+fi
+if [[ -z "$BUILD_USER" || "$BUILD_USER" == "root" ]]; then
+    BUILD_USER="$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 && $1 != "nobody" {print $1; exit}')"
+fi
+
+if [[ -z "$BUILD_USER" ]]; then
+    warn "No non-root user found to build AUR packages as (makepkg refuses to run as root)."
+    warn "Skipping yay/limine-mkinitcpio install — branding/plymouth will fall back to direct file edits."
+else
+    install_pkgs base-devel git go
+
+    if command -v yay >/dev/null 2>&1; then
+        ok "yay already installed"
+    else
+        YAY_BUILD_DIR="$(mktemp -d /tmp/ativos-yay-build.XXXXXX)"
+        chown "$BUILD_USER" "$YAY_BUILD_DIR"
+        info "Building yay as user '$BUILD_USER' (this can take a minute)"
+        if su - "$BUILD_USER" -c "git clone --quiet https://aur.archlinux.org/yay.git '$YAY_BUILD_DIR/yay' && cd '$YAY_BUILD_DIR/yay' && makepkg --noconfirm" >/tmp/ativos-yay-build.log 2>&1; then
+            YAY_PKG="$(find "$YAY_BUILD_DIR/yay" -maxdepth 1 -name 'yay-*.pkg.tar.*' | head -1)"
+            if [[ -n "$YAY_PKG" ]] && pacman -U --needed --noconfirm "$YAY_PKG"; then
+                ok "yay installed"
+            else
+                warn "yay build produced no installable package — see /tmp/ativos-yay-build.log"
+            fi
+        else
+            warn "Failed to build yay — see /tmp/ativos-yay-build.log. Continuing without it."
+        fi
+        rm -rf "$YAY_BUILD_DIR"
+    fi
+
+    if command -v yay >/dev/null 2>&1; then
+        if pacman -Qi limine-entry-tool >/dev/null 2>&1 && pacman -Qi limine-mkinitcpio-hook >/dev/null 2>&1; then
+            ok "limine-entry-tool + limine-mkinitcpio-hook already installed"
+        else
+            info "Installing limine-entry-tool + limine-mkinitcpio-hook via yay (as $BUILD_USER)"
+            if su - "$BUILD_USER" -c "yay -S --needed --noconfirm --sudoloop limine-entry-tool limine-mkinitcpio-hook" >/tmp/ativos-limine-aur-build.log 2>&1; then
+                ok "limine-entry-tool + limine-mkinitcpio-hook installed"
+            else
+                warn "Failed to install limine-mkinitcpio-hook via yay — see /tmp/ativos-limine-aur-build.log"
+                warn "Branding/plymouth steps will fall back to direct limine.conf edits."
+            fi
+        fi
+    fi
+fi
+
 info "Installing full KDE Plasma desktop"
 # plasma-meta pulls the full Plasma 6 shell (Kickoff, Kicker, System Settings,
 # KScreen, Discover, plasma-nm, etc). kde-applications-meta is deliberately

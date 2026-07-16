@@ -16,6 +16,19 @@ qt_add_executable(ativos-oobe
     oobebackend.h
 )
 
+# THE BUG: Theme.qml has `pragma Singleton`, but qt_add_qml_module's
+# automatic singleton detection isn't reliable across all Qt 6.5+ patch
+# versions/generators — when it misses it, Theme is registered as a plain
+# (non-singleton) type instead. Every `Theme.foo` reference in the app then
+# silently resolves against a *default-constructed* instance instead of the
+# real one, so every color/radius/duration collapses to its QML default
+# (transparent/black/0) — the exact "white background, black text, square
+# corners" failure mode. Setting QT_QML_SINGLETON_TYPE explicitly forces
+# correct registration regardless of the auto-detection quirk.
+set_source_files_properties(qml/Theme.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE true
+)
+
 qt_add_qml_module(ativos-oobe
     URI org.ativos.oobe
     VERSION 1.0

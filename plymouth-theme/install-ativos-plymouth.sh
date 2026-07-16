@@ -185,10 +185,10 @@ if [[ -n "$LIMINE_CONF" ]] || command -v limine-update >/dev/null 2>&1 || [[ -f 
 
         if command -v limine-update >/dev/null 2>&1; then
             echo "==> Running limine-update (refreshes limine.conf entries with the new cmdline)"
-            limine-update
+            limine-update || echo "    limine-update reported an error — the direct edit above still stands."
         elif command -v limine-mkinitcpio >/dev/null 2>&1; then
             echo "==> Running limine-mkinitcpio (refreshes limine.conf entries with the new cmdline)"
-            limine-mkinitcpio -P
+            limine-mkinitcpio -P || echo "    limine-mkinitcpio reported an error — the direct edit above still stands."
         fi
     fi
 

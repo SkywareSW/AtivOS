@@ -16,10 +16,19 @@ Button {
     // style. These are literal values so the button looks right
     // regardless of whether that singleton issue is fixed.
     readonly property color aqua: "#2dd4bf"
+    // THE BUG: the primary button used the same translucent "glass" fill
+    // (~30% alpha) as the secondary buttons. That reads fine over a dark
+    // themed panel, but as soon as the panel's real background isn't dark
+    // (broken Theme singleton falling back to white, or just a lighter
+    // page), a 30%-alpha teal over white is barely more than a pale tint —
+    // the button looked washed out and low-contrast instead of like the
+    // primary call-to-action. The primary pill is now a fully opaque solid
+    // fill so it reads clearly regardless of what's behind it; secondary/
+    // flat buttons keep the translucent glass look.
     property color baseColor: primary
-        ? Qt.rgba(0.176, 0.831, 0.749, 0.30)
+        ? aqua
         : (flatStyle ? Qt.rgba(0.176, 0.831, 0.749, 0.10) : Qt.rgba(0.176, 0.831, 0.749, 0.18))
-    property color textColor: "#eafffb"
+    property color textColor: primary ? "#0d1117" : "#eafffb"
     property real pillHeight: 40
     property real pillWidth: Math.max(implicitContentWidth + 40, 96)
 

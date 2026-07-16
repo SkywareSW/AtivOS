@@ -115,6 +115,25 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 height: 76
                 color: Theme.bgElevated
+                radius: panel.radius
+
+                // THE BUG: this bar sits flush against the panel's rounded
+                // bottom edge. `clip: true` on the panel only clips to its
+                // bounding box, not its rounded shape, so this bar's own
+                // (previously square) corners painted straight over where
+                // the panel's rounded bottom-left/bottom-right corners
+                // should have shown, making the whole window look
+                // rounded on top and square on the bottom. Fix: round this
+                // rectangle too, then mask its top corners back to square
+                // with a plain same-color rectangle over the top half —
+                // leaves only the bottom two corners rounded.
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: parent.radius
+                    color: parent.color
+                }
 
                 Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.divider }
 
