@@ -24,8 +24,10 @@ mkdir -p "$THEME_DEST"
 cp "$THEME_SRC/ativos.plymouth" "$THEME_DEST/"
 cp "$THEME_SRC/ativos.script"   "$THEME_DEST/"
 cp "$THEME_SRC/logo.png"        "$THEME_DEST/"
+cp "$THEME_SRC/logo_glow.png"      "$THEME_DEST/"
 cp "$THEME_SRC/progress_track.png" "$THEME_DEST/"
 cp "$THEME_SRC/progress_fill.png"  "$THEME_DEST/"
+cp "$THEME_SRC/progress_shine.png" "$THEME_DEST/"
 chmod 644 "$THEME_DEST"/*
 
 # ---- 3. add the plymouth hook to mkinitcpio -------------------------------

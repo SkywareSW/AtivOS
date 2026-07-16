@@ -11,7 +11,7 @@ QtObject {
     readonly property color textSecondary: "#9a9ca3"
     readonly property color divider: "#33343a"
     readonly property color cardBg: "#26272c"
-    readonly property color onAccent: "#0d1117"
+    readonly property color accentForeground: "#0d1117"
 
     // ---- shape --------------------------------------------------------
     readonly property int radiusWindow: 22

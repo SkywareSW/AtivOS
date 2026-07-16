@@ -1,5 +1,7 @@
 // AtivOS Plymouth boot splash
-// Centered logo with a slim progress bar beneath it (macOS/Omarchy style).
+// Centered logo with a soft glow, and a smooth glossy pill progress bar
+// underneath (macOS-style: eased motion + a subtle light sweep, rather
+// than a bar that jumps in hard steps).
 
 # ---- background: dark gradient matching the AtivOS logo palette ----
 Window.SetBackgroundTopColor(0.055, 0.047, 0.086);     // ~#0e0c16
@@ -7,6 +9,14 @@ Window.SetBackgroundBottomColor(0.114, 0.086, 0.184);  // ~#1d1630
 
 screen_width  = Window.GetWidth();
 screen_height = Window.GetHeight();
+
+# ---- soft glow behind the logo, for a bit of depth ----
+glow.image  = Image("logo_glow.png");
+glow.width  = screen_width * 0.30;
+glow.height = glow.width;
+glow.image  = glow.image.Scale(glow.width, glow.height);
+glow.sprite = Sprite(glow.image);
+glow.sprite.SetZ(5);
 
 # ---- logo, centered, slightly above true center ----
 logo.image  = Image("logo.png");
@@ -21,7 +31,11 @@ logo.sprite.SetX(logo.x);
 logo.sprite.SetY(logo.y);
 logo.sprite.SetZ(10);
 
-# ---- progress bar track (rounded pill, scaled uniformly so corners stay round) ----
+glow.sprite.SetX(logo.x + logo.width  / 2 - glow.width  / 2);
+glow.sprite.SetY(logo.y + logo.height / 2 - glow.height / 2);
+
+# ---- progress bar track (glossy rounded pill assets, drawn near native size
+#      so corners stay crisp — only mild uniform scaling to fit the screen) ----
 track.base  = Image("progress_track.png");
 track.scale = (screen_width * 0.24) / track.base.GetWidth();
 track.width  = track.base.GetWidth()  * track.scale;
@@ -34,35 +48,125 @@ track.sprite.SetX(track.x);
 track.sprite.SetY(track.y);
 track.sprite.SetZ(20);
 
-# ---- progress bar fill (plain rect inset inside the track; no corners
-#      needed on the fill itself since the track's rounded ends still show) ----
+# ---- progress bar fill: a proper rounded capsule (both ends already round
+#      in the source image), scaled only in width so its corner radius stays
+#      visually consistent instead of a flat rectangle inside a round track ----
 fill.base   = Image("progress_fill.png");
-fill.inset  = 3 * track.scale;
+fill.inset  = 2 * track.scale;
 fill.sprite = Sprite();
 fill.sprite.SetZ(21);
-fill.current_progress = 0;
+
+# ---- shine: a soft light sweep clamped so it never travels past the
+#      currently-filled width — gives the bar a bit of life without ever
+#      overlapping the still-empty part of the track ----
+shine.base   = Image("progress_shine.png");
+shine.sprite = Sprite();
+shine.sprite.SetZ(22);
 
 fun draw_fill(progress) {
     fill.max_width = track.width - fill.inset * 2;
     fill.w = fill.max_width * progress;
-    if (fill.w < 2) {
-        fill.w = 2;
+    if (fill.w < 3) {
+        fill.w = 3;
     }
     fill.h = track.height - fill.inset * 2;
     fill.image = fill.base.Scale(fill.w, fill.h);
     fill.sprite.SetImage(fill.image);
     fill.sprite.SetX(track.x + fill.inset);
     fill.sprite.SetY(track.y + fill.inset);
+
+    # shine only when there's enough filled width for it to read as a sweep
+    shine.min_width_to_show = 22;
+    if (fill.w > shine.min_width_to_show) {
+        shine.w = shine.base.GetWidth() * track.scale;
+        if (shine.w > fill.w * 0.9) {
+            shine.w = fill.w * 0.9;
+        }
+        shine.h = fill.h;
+        shine.image = shine.base.Scale(shine.w, shine.h);
+        shine.sprite.SetImage(shine.image);
+        shine.sprite.SetOpacity(1);
+
+        shine.range = fill.w - shine.w;
+        shine.raw   = shine.tick * 0.035;
+        shine.phase = shine.raw - Math.Int(shine.raw / 2) * 2;  // 0..2 sawtooth
+        if (shine.phase > 1) {
+            shine.pos = 2 - shine.phase;  // ping-pong back
+        } else {
+            shine.pos = shine.phase;
+        }
+        shine.sprite.SetX(track.x + fill.inset + shine.range * shine.pos);
+        shine.sprite.SetY(track.y + fill.inset);
+    } else {
+        shine.sprite.SetOpacity(0);
+    }
 }
+
+fill.target_progress  = 0;
+fill.display_progress = 0;
+shine.tick = 0;
 
 draw_fill(0);
 
 fun progress_callback(duration, progress) {
-    fill.current_progress = progress;
-    draw_fill(progress);
+    fill.target_progress = progress;
 }
 
 Plymouth.SetBootProgressFunction(progress_callback);
+
+# ---- fade-in on splash start + continuous easing/shimmer, driven from the
+#      refresh tick so the bar glides smoothly instead of jumping between
+#      the sparse discrete values boot events actually report ----
+splash.fade_ticks     = 24;
+splash.tick           = 0;
+splash.opacity        = 0;
+splash.quitting       = 0;
+splash.fade_out_ticks = 16;
+
+fun refresh_callback() {
+    shine.tick = shine.tick + 1;
+
+    # ease the visible fill toward the real target — a gentle exponential
+    # smoothing so progress glides rather than snapping between values
+    fill.display_progress = fill.display_progress + (fill.target_progress - fill.display_progress) * 0.12;
+    fill.diff = fill.target_progress - fill.display_progress;
+    if (fill.diff < 0) {
+        fill.diff = -fill.diff;
+    }
+    if (fill.diff < 0.001) {
+        fill.display_progress = fill.target_progress;
+    }
+    draw_fill(fill.display_progress);
+
+    if (splash.quitting) {
+        splash.tick = splash.tick + 1;
+        splash.opacity = 1 - splash.tick / splash.fade_out_ticks;
+        if (splash.opacity < 0) {
+            splash.opacity = 0;
+        }
+    } else if (splash.tick < splash.fade_ticks) {
+        splash.tick = splash.tick + 1;
+        splash.opacity = splash.tick / splash.fade_ticks;
+    } else {
+        splash.opacity = 1;
+    }
+
+    logo.sprite.SetOpacity(splash.opacity);
+    glow.sprite.SetOpacity(splash.opacity * 0.9);
+    track.sprite.SetOpacity(splash.opacity);
+    fill.sprite.SetOpacity(splash.opacity);
+    message.sprite.SetOpacity(splash.opacity);
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# ---- fade out gracefully instead of cutting straight to the desktop ----
+fun quit_callback() {
+    splash.quitting = 1;
+    splash.tick = 0;
+}
+
+Plymouth.SetQuitFunction(quit_callback);
 
 # ---- keep the splash readable during password prompts / fsck messages ----
 message.sprite = Sprite();

@@ -68,7 +68,7 @@ Item {
                         anchors.leftMargin: 14
                         anchors.verticalCenter: parent.verticalCenter
                         text: modelData.label
-                        color: index === root.selectedIndex ? Theme.onAccent : Theme.textPrimary
+                        color: index === root.selectedIndex ? Theme.accentForeground : Theme.textPrimary
                         font.pixelSize: 14
                         font.bold: index === root.selectedIndex
                     }

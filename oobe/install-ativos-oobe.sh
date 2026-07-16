@@ -53,7 +53,7 @@ echo "==> Syncing system"
 pacman -Syu --noconfirm
 
 echo "==> Installing build + runtime dependencies"
-install_pkgs base-devel gcc cmake ninja qt6-base qt6-declarative qt6-svg polkit accountsservice
+install_pkgs base-devel gcc cmake ninja qt6-base qt6-declarative qt6-svg polkit accountsservice breeze-icons
 
 echo "==> Verifying toolchain/Qt6 versions"
 echo "    gcc:      $(gcc -dumpversion)"
