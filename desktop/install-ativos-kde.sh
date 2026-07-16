@@ -69,7 +69,7 @@ install_pkgs \
     print-manager \
     xdg-desktop-portal-kde \
     qt6-imageformats \
-    layer-shell-qt6
+    layer-shell-qt
 
 info "Enabling SDDM"
 systemctl enable sddm >/dev/null
