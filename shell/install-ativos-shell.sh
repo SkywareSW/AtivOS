@@ -82,7 +82,15 @@ mkdir -p /etc/skel/.config
 # "pastel-powerline" is one of starship's built-in presets — colorful,
 # segmented, and readable, and renders correctly with the Nerd Font we
 # just installed.
-starship preset pastel-powerline -o /etc/skel/.config/starship.toml
+#
+# THE BUG: `starship preset -o` refuses to overwrite an existing file
+# without --force — so despite this script's own header claiming it's
+# "safe to re-run," any second run (e.g. via `ativ os-upgrade`) failed
+# right here with "Error saving file, use --force to overwrite existing
+# configuration file" and aborted this step, even though regenerating an
+# identical, deterministic preset file is exactly what re-running should
+# do. --force makes it actually idempotent.
+starship preset pastel-powerline -o /etc/skel/.config/starship.toml --force
 
 # ---- 5. fish config for new users ----------------------------------------
 info "Installing default fish config"
