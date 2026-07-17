@@ -88,6 +88,76 @@ fi
 echo "==> Setting AtivOS as the default Plymouth theme"
 plymouth-set-default-theme ativos
 
+# ---- 4b. replace the UKI's own embedded splash, if this system uses one ---
+#
+# THE BUG THIS FIXES: on systems where the kernel is packaged as a Unified
+# Kernel Image (UKI) — a single signed .efi at /boot/EFI/Linux/*.efi that
+# Limine (or systemd-boot) loads directly via the Boot Loader Spec Type #2
+# entry — systemd-stub shows its OWN splash image before the initramfs (and
+# therefore Plymouth) ever runs. That splash is a BMP baked directly into
+# the .efi file at build time by `ukify`/mkinitcpio, driven by the Splash=
+# key in /etc/kernel/uki.conf. Everything above this point (the mkinitcpio
+# HOOKS= edit, plymouth-set-default-theme) only affects what happens AFTER
+# the initramfs starts — none of it touches this pre-initramfs splash, so
+# on a UKI system you'd see Arch's default splash flash up first no matter
+# how correctly the rest of this script ran.
+#
+# Detection: a UKI setup shows up as either an existing /etc/kernel/uki.conf,
+# or a mkinitcpio preset that builds one directly (default_uki=/fallback_uki=
+# in /etc/mkinitcpio.d/*.preset), or an actual .efi already sitting in
+# /boot/EFI/Linux/. Any one of these means ukify is in the build path.
+IS_UKI=0
+if [[ -f /etc/kernel/uki.conf ]]; then
+    IS_UKI=1
+elif grep -qE '^\s*(default|fallback)_uki=' /etc/mkinitcpio.d/*.preset 2>/dev/null; then
+    IS_UKI=1
+elif compgen -G "/boot/EFI/Linux/*.efi" >/dev/null 2>&1; then
+    IS_UKI=1
+fi
+
+if [[ $IS_UKI -eq 1 ]]; then
+    echo "==> UKI setup detected — this system's boot splash comes from systemd-stub,"
+    echo "    not Plymouth. Replacing the embedded splash so it matches the AtivOS theme."
+
+    if ! command -v convert >/dev/null 2>&1 && ! command -v magick >/dev/null 2>&1; then
+        echo "==> Installing imagemagick (needed to build the UKI splash BMP)"
+        pacman -S --needed --noconfirm imagemagick
+    fi
+    CONVERT_BIN="convert"
+    command -v convert >/dev/null 2>&1 || CONVERT_BIN="magick"
+
+    UKI_SPLASH_SRC="$THEME_DEST/logo.png"
+    UKI_SPLASH_BMP="/usr/share/ativos-assets/ativos-splash.bmp"
+    mkdir -p "$(dirname "$UKI_SPLASH_BMP")"
+
+    # UEFI GOP splash images must be plain truecolor BMP (no alpha channel),
+    # so the PNG's transparency is flattened onto black first — matching the
+    # black backdrop systemd-stub already draws behind the splash, so there's
+    # no visible seam between "stub splash" and "Plymouth splash" frames.
+    echo "    Building $UKI_SPLASH_BMP from $UKI_SPLASH_SRC"
+    "$CONVERT_BIN" "$UKI_SPLASH_SRC" -background black -flatten -type TrueColor -define bmp:format=bmp3 "$UKI_SPLASH_BMP"
+
+    UKI_CONF="/etc/kernel/uki.conf"
+    cp "$UKI_CONF" "${UKI_CONF}.bak.$(date +%s)" 2>/dev/null || true
+
+    if [[ ! -f "$UKI_CONF" ]]; then
+        printf '[UKI]\nSplash=%s\n' "$UKI_SPLASH_BMP" > "$UKI_CONF"
+        echo "    Created $UKI_CONF with Splash=$UKI_SPLASH_BMP"
+    elif grep -qE '^\s*Splash=' "$UKI_CONF"; then
+        sed -i -E "s|^\s*Splash=.*|Splash=${UKI_SPLASH_BMP}|" "$UKI_CONF"
+        echo "    Updated Splash= in $UKI_CONF"
+    elif grep -qE '^\s*\[UKI\]' "$UKI_CONF"; then
+        sed -i -E "/^\s*\[UKI\]/a Splash=${UKI_SPLASH_BMP}" "$UKI_CONF"
+        echo "    Added Splash= under existing [UKI] section in $UKI_CONF"
+    else
+        printf '\n[UKI]\nSplash=%s\n' "$UKI_SPLASH_BMP" >> "$UKI_CONF"
+        echo "    Appended a [UKI] section with Splash= to $UKI_CONF"
+    fi
+
+    echo "    NOTE: this only takes effect once the UKI is rebuilt — the"
+    echo "    'mkinitcpio -P' step right after this one does that automatically."
+fi
+
 # -R above is supposed to rebuild the initramfs, but it only reliably covers
 # the currently-running kernel's preset. Force a full rebuild across every
 # preset in /etc/mkinitcpio.d/ (linux, linux-lts, etc.) so the hook change
