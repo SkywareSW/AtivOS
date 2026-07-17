@@ -61,6 +61,7 @@ run_step() {
 # Make sure the sub-scripts are executable regardless of how this repo was
 # transferred (unzip and some git configs can strip the +x bit).
 chmod +x "$SCRIPT_DIR"/desktop/install-ativos-kde.sh \
+         "$SCRIPT_DIR"/desktop/install-ativos-gnome.sh \
          "$SCRIPT_DIR"/branding/install-ativos-branding.sh \
          "$SCRIPT_DIR"/package-manager/setup-ativ.sh \
          "$SCRIPT_DIR"/package-manager/ativ \
@@ -73,7 +74,41 @@ chmod +x "$SCRIPT_DIR"/desktop/install-ativos-kde.sh \
 
 banner
 
-run_step "KDE Plasma desktop"                 "$SCRIPT_DIR/desktop/install-ativos-kde.sh"
+# ---- desktop environment choice --------------------------------------
+# ATIVOS_DESKTOP can be set ahead of time (plasma|gnome) to skip the
+# prompt entirely — useful for scripted/unattended installs, e.g.:
+#   ATIVOS_DESKTOP=gnome sudo -E ./install-all.sh
+DESKTOP_CHOICE="${ATIVOS_DESKTOP:-}"
+if [[ -z "$DESKTOP_CHOICE" ]]; then
+    if [[ -t 0 ]]; then
+        echo "Which desktop would you like to install?"
+        echo "  1) KDE Plasma  (default)"
+        echo "  2) GNOME"
+        read -r -p "Enter 1 or 2: " reply || true
+        case "$reply" in
+            2) DESKTOP_CHOICE="gnome" ;;
+            *) DESKTOP_CHOICE="plasma" ;;
+        esac
+    else
+        # No TTY to prompt on (e.g. piped into bash non-interactively) —
+        # keep the previous default behavior rather than hanging on `read`.
+        DESKTOP_CHOICE="plasma"
+    fi
+fi
+
+case "$DESKTOP_CHOICE" in
+    gnome)
+        DESKTOP_LABEL="GNOME desktop"
+        DESKTOP_SCRIPT="$SCRIPT_DIR/desktop/install-ativos-gnome.sh"
+        ;;
+    plasma|kde|*)
+        DESKTOP_LABEL="KDE Plasma desktop"
+        DESKTOP_SCRIPT="$SCRIPT_DIR/desktop/install-ativos-kde.sh"
+        ;;
+esac
+printf "${C_DIM}Installing: ${C_RESET}${C_BOLD}%s${C_RESET}\n" "$DESKTOP_LABEL"
+
+run_step "$DESKTOP_LABEL"                     "$DESKTOP_SCRIPT"
 run_step "Branding"                           "$SCRIPT_DIR/branding/install-ativos-branding.sh"
 run_step "ativ package manager"               "$SCRIPT_DIR/package-manager/setup-ativ.sh"
 run_step "GPU drivers"                        "$SCRIPT_DIR/gpu-drivers/install-ativos-gpu-drivers.sh"

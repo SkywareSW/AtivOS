@@ -181,7 +181,13 @@ if [[ "$INSTALL_ATIVOS" =~ ^[Yy]$ ]]; then
 
     if [[ -n "$ATIVOS_REPO_DIR" && -f "$ATIVOS_REPO_DIR/install-all.sh" ]]; then
         chmod +x "$ATIVOS_REPO_DIR/install-all.sh"
-        if ! bash "$ATIVOS_REPO_DIR/install-all.sh"; then
+        # install-all.sh runs here with no `sudo` involved and no login
+        # session for $USERNAME yet, so scripts further down the chain
+        # (branding) can't infer the real user via SUDO_USER/logname the
+        # way they can when run manually post-boot. Export it explicitly —
+        # this is the one place in the whole install that knows it for
+        # certain, since this script is the one that ran `useradd`.
+        if ! ATIVOS_TARGET_USER="$USERNAME" bash "$ATIVOS_REPO_DIR/install-all.sh"; then
             STACK_INSTALLED=0
             c_err "install-all.sh reported one or more failed steps (see output above)."
         fi

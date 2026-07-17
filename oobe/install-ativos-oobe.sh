@@ -5,7 +5,8 @@
 # wizard that walks a new user through language, time zone & keyboard,
 # appearance, account details (name/username/hostname/password), network,
 # gaming & performance defaults, optional apps, privacy, and an avatar
-# picture. It autostarts once per account (via /etc/xdg/autostart) and
+# picture. It autostarts once per account under any desktop (via
+# /etc/xdg/autostart — no OnlyShowIn restriction) and
 # marks itself done in ~/.config/ativos/oobe-done so it never shows again
 # after the user finishes it.
 #
@@ -99,6 +100,6 @@ install -Dm644 "$SCRIPT_DIR/org.ativos.oobe.systemconfig.policy" /usr/share/polk
 
 echo ""
 echo "==> AtivOS Setup Assistant installed."
-echo "    It will run automatically the first time each user logs into Plasma."
+echo "    It will run automatically the first time each user logs in."
 echo "    To preview it now as the current user: ativos-oobe"
 echo "    To reset it and see it again: rm -f ~/.config/ativos/oobe-done"

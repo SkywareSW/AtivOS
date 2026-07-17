@@ -120,14 +120,16 @@ GRUB_DEFAULT="/etc/default/grub"
 # actually matters for archinstall's native Limine installs, which write
 # this file directly at install time with no limine-entry-tool/AUR layer
 # on top at all.
-LIMINE_CONF=""
-for c in /boot/limine.conf /boot/EFI/limine/limine.conf /boot/limine/limine.conf \
-         /efi/limine.conf /efi/EFI/limine/limine.conf /efi/limine/limine.conf; do
-    [[ -f "$c" ]] && LIMINE_CONF="$c" && break
-done
-if [[ -z "$LIMINE_CONF" ]]; then
-    LIMINE_CONF="$(find /boot /efi -maxdepth 4 -iname 'limine.conf' 2>/dev/null | head -1)"
-fi
+# Locate the real limine.conf on disk, if one exists — this is what
+# actually matters for archinstall's native Limine installs, which write
+# this file directly at install time with no limine-entry-tool/AUR layer
+# on top at all. See lib/lib-find-limine-conf.sh for why this is a shared
+# helper: an earlier version could abort this entire script here on
+# systems with no separate /efi mount, silently skipping the boot splash
+# setup below it.
+# shellcheck source=../lib/lib-find-limine-conf.sh
+source "$SCRIPT_DIR/../lib/lib-find-limine-conf.sh"
+find_limine_conf
 
 add_cmdline_params() {
     # Appends the given params inside the existing KERNEL_CMDLINE[default]="..."

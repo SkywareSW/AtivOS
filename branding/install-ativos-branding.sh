@@ -28,7 +28,29 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-REAL_USER="${SUDO_USER:-$(logname 2>/dev/null || echo root)}"
+# THE BUG: when the full AtivOS stack installs automatically inside the
+# chroot (ativos-chroot-setup.sh calling install-all.sh directly, with
+# INSTALL_ATIVOS=y), there's no `sudo` involved and no login session for
+# the newly created user yet — SUDO_USER is unset AND `logname` has
+# nothing to read (no controlling terminal/utmp entry in a chroot), so it
+# silently fell back to "root". Every branding step that follows (fastfetch
+# config, KDE icon theme, Kickoff button) was then written to /root/.config
+# instead of the real user's home — the actual user never saw any of it,
+# with no error anywhere to explain why.
+#
+# Fixed with two layers:
+#  1. ATIVOS_TARGET_USER, exported by ativos-chroot-setup.sh right before it
+#     calls install-all.sh — ground truth, since that script is the one that
+#     actually ran `useradd` and knows the username for certain.
+#  2. A getent fallback (first regular UID >= 1000 account) for anyone
+#     running this script standalone with no SUDO_USER/logname available —
+#     matches the same fallback already used by the yay/AUR build-user
+#     detection in desktop/lib-yay-limine-bootstrap.sh.
+REAL_USER="${ATIVOS_TARGET_USER:-${SUDO_USER:-$(logname 2>/dev/null || true)}}"
+if [[ -z "$REAL_USER" || "$REAL_USER" == "root" ]]; then
+    REAL_USER="$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 && $1 != "nobody" {print $1; exit}')"
+fi
+REAL_USER="${REAL_USER:-root}"
 REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -114,15 +136,12 @@ echo "==> Configuring Limine boot menu entry name"
 
 # Locate the actual config file on disk, regardless of which mechanism (if
 # any) manages it — this is what actually matters for archinstall-style
-# native Limine installs.
-LIMINE_CONF=""
-for c in /boot/limine.conf /boot/EFI/limine/limine.conf /boot/limine/limine.conf \
-         /efi/limine.conf /efi/EFI/limine/limine.conf /efi/limine/limine.conf; do
-    [[ -f "$c" ]] && LIMINE_CONF="$c" && break
-done
-if [[ -z "$LIMINE_CONF" ]]; then
-    LIMINE_CONF="$(find /boot /efi -maxdepth 4 -iname 'limine.conf' 2>/dev/null | head -1)"
-fi
+# native Limine installs. See lib/lib-find-limine-conf.sh for why this is a
+# shared helper instead of inline logic: an earlier version could abort
+# this entire script here, silently skipping every branding step after it.
+# shellcheck source=../lib/lib-find-limine-conf.sh
+source "$SCRIPT_DIR/../lib/lib-find-limine-conf.sh"
+find_limine_conf
 
 if [[ -n "$LIMINE_CONF" ]]; then
     echo "    Found $LIMINE_CONF"
