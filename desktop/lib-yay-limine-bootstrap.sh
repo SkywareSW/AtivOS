@@ -21,17 +21,44 @@ ok()   { printf "${C_OK}  \xe2\x9c\x94${C_RESET} %s\n" "$*"; }
 warn() { printf "${C_ACCENT}  !!${C_RESET} %s\n" "$*"; }
 
 pkg_installed() { pacman -Qi "$1" >/dev/null 2>&1; }
+pkg_available() { pacman -Si "$1" >/dev/null 2>&1; }
 
 install_pkgs() {
-    local todo=()
+    local todo=() missing=()
     for p in "$@"; do
-        pkg_installed "$p" || todo+=("$p")
+        pkg_installed "$p" && continue
+        # THE BUG: this used to hand the whole package list straight to a
+        # single `pacman -S --needed --noconfirm ...` call. Pacman resolves
+        # every target *before* installing anything — if even one package
+        # name in the list is wrong (renamed upstream, moved to AUR, dropped
+        # from the repos since this list was written — e.g.
+        # gnome-shell-extension-gsconnect/-appindicator have moved between
+        # extra/AUR before), pacman exits with "error: target not found:
+        # <pkg>" and, under `set -euo pipefail`, the ENTIRE batch aborts —
+        # including every other package that would have installed fine.
+        # That's what actually kills the GNOME/KDE install script on a
+        # single bad package name, and it's easy to misread pacman's "target
+        # not found" as some kind of missing-asset error since nothing else
+        # gets installed either.
+        # Fix: pre-check each package individually with `pacman -Si` and
+        # only hand pacman -S a batch of names we already know exist —
+        # anything unresolvable is reported and skipped instead of taking
+        # the whole install down with it.
+        if pkg_available "$p"; then
+            todo+=("$p")
+        else
+            missing+=("$p")
+        fi
     done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        warn "Package(s) not found in any enabled repo, skipping: ${missing[*]}"
+        warn "(renamed, moved to AUR, or dropped upstream — install manually via yay if you need them)"
+    fi
     if [[ ${#todo[@]} -gt 0 ]]; then
         info "Installing: ${C_BOLD}${todo[*]}${C_RESET}"
         pacman -S --needed --noconfirm "${todo[@]}"
         ok "Installed: ${todo[*]}"
-    else
+    elif [[ ${#missing[@]} -eq 0 ]]; then
         ok "Already installed: $*"
     fi
 }

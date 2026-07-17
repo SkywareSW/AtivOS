@@ -17,6 +17,12 @@ if ! command -v pacman >/dev/null 2>&1; then
     exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/lib-find-limine-conf.sh
+source "$SCRIPT_DIR/../lib/lib-find-limine-conf.sh"
+# shellcheck source=../lib/lib-add-cmdline-param.sh
+source "$SCRIPT_DIR/../lib/lib-add-cmdline-param.sh"
+
 # ---- helpers ----------------------------------------------------------
 pkg_installed() { pacman -Qi "$1" >/dev/null 2>&1; }
 any_installed() { for p in "$@"; do pkg_installed "$p" && return 0; done; return 1; }
@@ -84,22 +90,43 @@ if [[ $HAS_NVIDIA -eq 1 ]]; then
 
         nvidia_module_built() {
             # dkms modules land under /usr/lib/modules/<kver>/updates/dkms/
-            find "/usr/lib/modules/$(uname -r)" -name 'nvidia.ko*' 2>/dev/null | grep -q .
+            #
+            # THE BUG: this used to check /usr/lib/modules/$(uname -r) only.
+            # That's wrong here — the entire AtivOS stack (this script
+            # included) runs inside `arch-chroot` during install
+            # (ativos-chroot-setup.sh -> install-all.sh -> this script).
+            # `uname -r` inside a chroot reports the HOST/live-ISO's
+            # running kernel, not the kernel that was just pacstrapped into
+            # the target. That kernel version essentially never exists
+            # under the target's /usr/lib/modules/, so the check always
+            # failed here even when nvidia-open-dkms built the module
+            # correctly — which meant the early-KMS MODULES= edit and
+            # nvidia_drm.modeset=1 cmdline param below (the actual fix for
+            # the NVIDIA splash) were silently skipped on every chroot
+            # install. Instead, look at every kernel actually installed on
+            # disk (each one has a /usr/lib/modules/<kver>/pkgbase file) —
+            # this works identically whether run in a chroot or normally.
+            local kdir
+            for kdir in /usr/lib/modules/*/; do
+                [[ -f "${kdir}pkgbase" ]] || continue
+                find "$kdir" -name 'nvidia.ko*' 2>/dev/null | grep -q . && return 0
+            done
+            return 1
         }
 
         install_pkgs nvidia-open-dkms "${NVIDIA_UTIL_PKGS[@]}"
 
         if nvidia_module_built; then
-            echo "    nvidia-open-dkms built successfully for kernel $(uname -r)."
+            echo "    nvidia-open-dkms built successfully."
         else
             echo "!! nvidia-open-dkms installed but didn't produce a module for"
-            echo "   kernel $(uname -r). Two likely causes:"
+            echo "   any installed kernel. Two likely causes:"
             echo "     1. Your card is pre-Turing (Maxwell/Pascal, GTX 900/10xx or"
             echo "        older) — the open modules don't support it at all. You'll"
             echo "        need 'nvidia-580xx-dkms' from the AUR instead:"
             echo "          sudo pacman -Rns nvidia-open-dkms nvidia-utils nvidia-settings"
             echo "          yay -S nvidia-580xx-dkms nvidia-580xx-utils nvidia-580xx-settings"
-            echo "     2. linux-headers is missing or doesn't match the running kernel"
+            echo "     2. linux-headers is missing or doesn't match the installed kernel"
             echo "        — check: dkms status"
             echo "   Skipping the early-KMS mkinitcpio edit below until this is sorted —"
             echo "   baking in a module that doesn't exist would only break the"
@@ -119,6 +146,23 @@ if [[ $HAS_NVIDIA -eq 1 ]]; then
                     sed -i -E 's/^MODULES=\(([^)]*)\)/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
                 fi
                 NEEDS_REBUILD=1
+            fi
+
+            # THE BUG (boot splash never shows on NVIDIA): loading nvidia_drm
+            # early via MODULES= above is not enough by itself — the module
+            # loads but modesetting stays off unless the kernel is explicitly
+            # told to enable it. Without this, Plymouth has no real DRM/KMS
+            # device to draw the graphical splash on and silently falls back
+            # to a blank/text boot (GNOME/KDE still start fine afterwards,
+            # which is why this is easy to miss — only the splash is
+            # affected). This must be a kernel *cmdline* param, not a
+            # modprobe option, so it's active in the initramfs stage before
+            # udev/systemd would otherwise apply a modprobe.d config.
+            if ! grep -qE '\bnvidia_drm\.modeset=1\b' /proc/cmdline 2>/dev/null; then
+                echo "==> Enabling nvidia_drm.modeset=1 on the kernel command line (required for Plymouth on NVIDIA)"
+                add_kernel_cmdline_param "nvidia_drm.modeset=1"
+            else
+                echo "    nvidia_drm.modeset=1 already active on the current boot"
             fi
         fi
     fi
