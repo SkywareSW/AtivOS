@@ -71,25 +71,55 @@ if [[ $HAS_NVIDIA -eq 1 ]]; then
     if any_installed nvidia nvidia-dkms nvidia-open nvidia-open-dkms nvidia-lts; then
         echo "    NVIDIA driver already installed, skipping."
     else
-        # nvidia-dkms works across every NVIDIA GPU Arch still supports and
-        # survives kernel upgrades without a rebuild. (Turing/RTX-20xx and
-        # newer cards can switch to nvidia-open-dkms manually later if you
-        # want the open kernel modules instead.)
-        NVIDIA_PKGS=(nvidia-dkms nvidia-utils nvidia-settings)
-        multilib_enabled && NVIDIA_PKGS+=(lib32-nvidia-utils)
-        install_pkgs "${NVIDIA_PKGS[@]}"
+        # As of driver 590 (Dec 2025), Arch replaced its official NVIDIA
+        # packages with the open kernel modules entirely: `nvidia-dkms`
+        # doesn't exist anymore, `nvidia-open-dkms` is what's in [extra] now
+        # for every kernel. Driver 590 also dropped Pascal/Maxwell (GTX
+        # 900/10xx and older) support outright — those cards need the
+        # legacy `nvidia-580xx-dkms` package from the AUR instead, which
+        # this script won't build automatically (needs an AUR helper and a
+        # much longer build than a repo package).
+        NVIDIA_UTIL_PKGS=(nvidia-utils nvidia-settings)
+        multilib_enabled && NVIDIA_UTIL_PKGS+=(lib32-nvidia-utils)
 
-        # Early KMS so plymouth/the boot splash renders correctly instead of
-        # flashing to a black screen before the driver loads.
-        if ! grep -qE '^MODULES=\([^)]*\bnvidia\b' /etc/mkinitcpio.conf; then
-            echo "==> Enabling early KMS for NVIDIA in mkinitcpio.conf"
-            cp /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
-            if grep -qE '^MODULES=\(\s*\)' /etc/mkinitcpio.conf; then
-                sed -i -E 's/^MODULES=\(\s*\)/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
-            else
-                sed -i -E 's/^MODULES=\(([^)]*)\)/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
+        nvidia_module_built() {
+            # dkms modules land under /usr/lib/modules/<kver>/updates/dkms/
+            find "/usr/lib/modules/$(uname -r)" -name 'nvidia.ko*' 2>/dev/null | grep -q .
+        }
+
+        install_pkgs nvidia-open-dkms "${NVIDIA_UTIL_PKGS[@]}"
+
+        if nvidia_module_built; then
+            echo "    nvidia-open-dkms built successfully for kernel $(uname -r)."
+        else
+            echo "!! nvidia-open-dkms installed but didn't produce a module for"
+            echo "   kernel $(uname -r). Two likely causes:"
+            echo "     1. Your card is pre-Turing (Maxwell/Pascal, GTX 900/10xx or"
+            echo "        older) — the open modules don't support it at all. You'll"
+            echo "        need 'nvidia-580xx-dkms' from the AUR instead:"
+            echo "          sudo pacman -Rns nvidia-open-dkms nvidia-utils nvidia-settings"
+            echo "          yay -S nvidia-580xx-dkms nvidia-580xx-utils nvidia-580xx-settings"
+            echo "     2. linux-headers is missing or doesn't match the running kernel"
+            echo "        — check: dkms status"
+            echo "   Skipping the early-KMS mkinitcpio edit below until this is sorted —"
+            echo "   baking in a module that doesn't exist would only break the"
+            echo "   initramfs rebuild here and in every later step that also rebuilds"
+            echo "   it (Plymouth). Re-run this script once the module builds."
+        fi
+
+        if nvidia_module_built; then
+            # Early KMS so plymouth/the boot splash renders correctly instead
+            # of flashing to a black screen before the driver loads.
+            if ! grep -qE '^MODULES=\([^)]*\bnvidia\b' /etc/mkinitcpio.conf; then
+                echo "==> Enabling early KMS for NVIDIA in mkinitcpio.conf"
+                cp /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
+                if grep -qE '^MODULES=\(\s*\)' /etc/mkinitcpio.conf; then
+                    sed -i -E 's/^MODULES=\(\s*\)/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
+                else
+                    sed -i -E 's/^MODULES=\(([^)]*)\)/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
+                fi
+                NEEDS_REBUILD=1
             fi
-            NEEDS_REBUILD=1
         fi
     fi
     echo ""
@@ -169,7 +199,11 @@ fi
 # ---- rebuild initramfs if anything changed -----------------------------
 if [[ $NEEDS_REBUILD -eq 1 ]] && command -v mkinitcpio >/dev/null 2>&1; then
     echo "==> Rebuilding initramfs for all kernel presets"
-    mkinitcpio -P
+    if ! mkinitcpio -P; then
+        echo "!! mkinitcpio -P failed. mkinitcpio.conf was backed up before editing"
+        echo "   (see /etc/mkinitcpio.conf.bak.*) if you need to revert the change."
+        exit 1
+    fi
 fi
 
 echo "==> GPU driver check complete."

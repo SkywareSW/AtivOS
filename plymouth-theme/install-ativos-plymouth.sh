@@ -94,7 +94,18 @@ plymouth-set-default-theme ativos
 # from step 3 actually lands in whichever image the bootloader boots.
 if command -v mkinitcpio >/dev/null 2>&1; then
     echo "==> Rebuilding initramfs for all kernel presets"
-    mkinitcpio -P
+    if ! mkinitcpio -P; then
+        echo "!! mkinitcpio -P failed here. This step (Plymouth) only touches the"
+        echo "   HOOKS= line, not MODULES=, so if this is failing it's almost always"
+        echo "   because /etc/mkinitcpio.conf already references a kernel module that"
+        echo "   doesn't exist on disk — most commonly a leftover NVIDIA entry from a"
+        echo "   dkms build that didn't produce a module. Check:"
+        echo "     grep MODULES= /etc/mkinitcpio.conf"
+        echo "     dkms status"
+        echo "   Fix that, then re-run 'mkinitcpio -P' by hand (the plymouth theme"
+        echo "   itself is already installed at this point)."
+        exit 1
+    fi
 fi
 
 # ---- 5. make sure the kernel actually shows the splash --------------------
