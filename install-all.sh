@@ -79,6 +79,24 @@ banner
 # prompt entirely — useful for scripted/unattended installs, e.g.:
 #   ATIVOS_DESKTOP=gnome sudo -E ./install-all.sh
 DESKTOP_CHOICE="${ATIVOS_DESKTOP:-}"
+
+# If a desktop is already installed on this system (e.g. re-running
+# install-all.sh after the initial install, to pick up fixes to the other
+# steps — branding, GPU drivers, Plymouth, etc.), don't make the person
+# answer the same "which desktop" question again every time. Detect
+# whichever one is actually present and reuse it silently. ATIVOS_DESKTOP
+# above still wins if explicitly set, in case someone genuinely wants to
+# switch desktops or install the other one alongside.
+if [[ -z "$DESKTOP_CHOICE" ]]; then
+    if pacman -Qi gnome-shell >/dev/null 2>&1; then
+        DESKTOP_CHOICE="gnome"
+        echo "GNOME already installed — reusing it, skipping the desktop prompt."
+    elif pacman -Qi plasma-desktop >/dev/null 2>&1; then
+        DESKTOP_CHOICE="plasma"
+        echo "KDE Plasma already installed — reusing it, skipping the desktop prompt."
+    fi
+fi
+
 if [[ -z "$DESKTOP_CHOICE" ]]; then
     if [[ -t 0 ]]; then
         echo "Which desktop would you like to install?"
