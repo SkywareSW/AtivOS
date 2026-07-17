@@ -10,6 +10,23 @@ Window.SetBackgroundBottomColor(0, 0, 0);  // #000000
 screen_width  = Window.GetWidth();
 screen_height = Window.GetHeight();
 
+# THE BUG (black screen, nothing drawn): every size below is derived from
+# screen_width/screen_height as a fraction (e.g. logo.width = screen_width *
+# 0.18). If Plymouth queries the display before the DRM mode is fully
+# negotiated — a known race that shows up more on NVIDIA, where modesetting
+# comes up later in boot than on Intel/AMD — GetWidth()/GetHeight() can
+# return 0 here. Every sprite then scales to 0x0: invisible, but the
+# explicit black background above still shows, so the splash "works" (no
+# errors, hook fires, screen goes black) while displaying nothing at all.
+# Fall back to a sane 1080p-class default so sprites always get real,
+# non-zero dimensions even if the true size wasn't available yet.
+if (screen_width == 0) {
+    screen_width = 1920;
+}
+if (screen_height == 0) {
+    screen_height = 1080;
+}
+
 # ---- soft glow behind the logo, for a bit of depth ----
 glow.image  = Image("logo_glow.png");
 glow.width  = screen_width * 0.30;

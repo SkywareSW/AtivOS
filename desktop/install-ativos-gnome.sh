@@ -34,30 +34,17 @@ bootstrap_yay_and_limine_aur || warn "yay/Limine AUR bootstrap hit an unexpected
 clear_stale_pacman_lock
 
 info "Installing full GNOME desktop"
-# gnome pulls the full GNOME shell + core apps (Files, Settings, Software,
-# Terminal, Text Editor, etc). gnome-extra is deliberately *not* used here
-# (it's enormous and includes things like a full games suite) — instead we
-# pull the everyday-use subset a new install actually needs, matching the
-# "Full GNOME" experience users expect (Files, Terminal, image viewer,
-# archive tool, etc), plus GSConnect as the closest equivalent to KDE
-# Connect for phone integration.
-install_pkgs \
-    gnome \
-    gdm \
-    gnome-tweaks \
-    gnome-shell-extension-appindicator \
-    gnome-shell-extension-gsconnect \
-    gnome-terminal \
-    gnome-text-editor \
-    file-roller \
-    loupe \
-    gnome-screenshot \
-    gnome-calculator \
-    evince \
-    gnome-disk-utility \
-    gnome-system-monitor \
-    xdg-desktop-portal-gnome \
-    xdg-desktop-portal-gtk
+# Simplified to a plain, direct pacman call for the "gnome" group (+ gdm for
+# the login manager) instead of a curated list of individual apps
+# (gnome-tweaks, extensions, file-roller, loupe, etc). The curated list was
+# causing partial installs: pacman resolves every target in a single -S
+# call before installing anything, so one bad/renamed name in that longer
+# list (extension packages in particular drift between extra/AUR) could
+# abort the whole transaction. "gnome" as a group already pulls the full
+# standard app set (Files, Terminal, Text Editor, Settings, Software,
+# image viewer, archive tool, etc), so this is both simpler and more
+# reliable.
+pacman -S --needed --noconfirm gnome gdm
 
 info "Enabling GDM"
 systemctl enable gdm >/dev/null
